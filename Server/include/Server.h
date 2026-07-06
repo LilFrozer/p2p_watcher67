@@ -27,12 +27,10 @@ private:
     boost_udp::socket   udp_socker_{nullptr};
     boost_udp::endpoint udp_endPoint_{};
     std::array<char, 1024> udp_recvBuffer_{};
-private:
     // --- tcp ---
     boost_tcp::acceptor tcp_acceptor_;
 public:
     void ListenTcp() override;
-public:
     BoostServer(boost::asio::io_context& io_context,
                 const std::string &addr,
                 const uint16_t &port);

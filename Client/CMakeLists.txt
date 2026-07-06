@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(boost_client LANGUAGES CXX)
+project(Client LANGUAGES CXX)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -11,21 +11,21 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
 
 qt_standard_project_setup()
 
-qt_add_executable(boost_client
+qt_add_executable(Client
     WIN32 MACOSX_BUNDLE
-    src/mainclient.cpp
-    src/mainclient.ui
-    src/connection.cpp
-    src/mainclient.cpp
-    src/main.cpp
-    src/qcustomplot.cpp
-    inc/mainclient.h
-    inc/connection.h
-    inc/qcustomplot.h
-    inc/GroupData.h
+    source/mainclient.cpp
+    source/mainclient.ui
+    source/connection.cpp
+    source/mainclient.cpp
+    source/main.cpp
+    source/qcustomplot.cpp
+    include/mainclient.h
+    include/connection.h
+    include/qcustomplot.h
+    include/GroupData.h
 )
 
-target_link_libraries(boost_client
+target_link_libraries(Client
     PRIVATE
         Qt::Core
         Qt::Widgets
@@ -33,13 +33,13 @@ target_link_libraries(boost_client
         # Qt::Multimedia
 )
 
-target_include_directories(boost_client
+target_include_directories(Client
     PRIVATE
         ${CMAKE_CURRENT_BINARY_DIR}
         ${BOOST_INCLUDE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/inc
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
-target_compile_definitions(boost_client
+target_compile_definitions(Client
     PRIVATE
     QT_NO_PRINTER
     BOOST_BEAST_USE_STD_ERIC=1
@@ -48,14 +48,14 @@ target_compile_definitions(boost_client
 
 include(GNUInstallDirs)
 
-install(TARGETS boost_client
+install(TARGETS Client
     BUNDLE  DESTINATION .
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
 qt_generate_deploy_app_script(
-    TARGET boost_client
+    TARGET Client
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
 )

@@ -8,7 +8,7 @@ using str = std::string;
 using u32 = unsigned;
 using u16 = uint16_t;
 using u8 = uint8_t;
-using vU8 = std::vector<uint8_t>;
+using vU8 = std::vector<u8>;   // == std::vector<char>
 static_assert(sizeof(u32)==4, "sizeof(u32)!=4");
 static_assert(sizeof(u16)==2, "sizeof(u16)!=2");
 static_assert(sizeof(u8)==1, "sizeof(u8)!=1");

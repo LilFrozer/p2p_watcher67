@@ -4,7 +4,7 @@
 #include "GroupData.h"
 
 namespace proto_project {
-    const str kServerAddr{"192.168.1.73"};
+    const str kServerAddr{"172.20.10.10"};
     const u16 kServerHash = 0x1337;
     const u16 kServerPort = 1122;
 

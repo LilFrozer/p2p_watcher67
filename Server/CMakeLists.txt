@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(boost_server)
+project(Server)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,31 +16,31 @@ find_path(BOOST_INCLUDE_DIR
 # Экспорт команд для Zed (чтобы работало автодополнение)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_executable(boost_server
-  src/main.cpp
-  src/CssWork.cpp
-        src/Server.cpp
-        include/Server.h
-        src/ClientSession.cpp
-        include/ClientSession.h
-        include/GroupData.h
-        src/ImitatorFar.cpp
-        include/ImitatorFar.h
+add_executable(Server
+    source/main.cpp
+    source/CssWork.cpp
+    source/Server.cpp
+    include/Server.h
+    source/ClientSession.cpp
+    include/ClientSession.h
+    include/GroupData.h
+    source/ImitatorFar.cpp
+    include/ImitatorFar.h
 )
 
-target_include_directories(boost_server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(Server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(
-        boost_server PRIVATE
+        Server PRIVATE
         ${BOOST_INCLUDE_DIR}
         src
 )
 
-target_link_libraries(boost_server
+target_link_libraries(Server
         ${Boost_LIBRARIES}
 )
 
 # Говорим Beast использовать std::error_code вместо boost::system::error_code
-target_compile_definitions(boost_server PRIVATE
+target_compile_definitions(Server PRIVATE
         BOOST_BEAST_USE_STD_ERIC=1
         BOOST_ASIO_USE_STD_ERIC=1
 )

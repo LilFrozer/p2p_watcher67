@@ -16,14 +16,14 @@ void BoostConnection::connect(const str &host, const u16 port)
 {
     try
     {
-        resolver_.async_resolve(host, std::to_string(port), [this](boost::system::error_code ec, tcpNamespace::resolver::results_type endpoints)
+        resolver_.async_resolve(host, std::to_string(port), [this](boost::system::error_code ec, boost_tcp::resolver::results_type endpoints)
         {
             if( ec )
             {
                 this->handle_error(ec, "resolve");
                 return;
             }
-            boost::asio::async_connect(socket_, endpoints, [this](boost::system::error_code ec, tcpNamespace::endpoint)
+            boost::asio::async_connect(socket_, endpoints, [this](boost::system::error_code ec, boost_tcp::endpoint)
             {
                 if( ec )
                 {
@@ -127,7 +127,7 @@ void BoostConnection::disconnect()
     if( socket_.is_open() )
     {
         boost::system::error_code ec;
-        socket_.shutdown(tcpNamespace::socket::shutdown_both, ec);
+        socket_.shutdown(boost_tcp::socket::shutdown_both, ec);
         socket_.close(ec);
     }
 

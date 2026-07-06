@@ -7,6 +7,11 @@ int main(int argc, char *argv[])
     try {
         QApplication a(argc, argv);
 
+        if (!CGPreflightScreenCaptureAccess()) {
+            CGRequestScreenCaptureAccess();
+            throw std::runtime_error("");
+        }
+
         boost::asio::io_context io_context;
         auto work_guard = boost::asio::make_work_guard(io_context);
         std::thread asio_thread([&io_context]() { io_context.run(); });

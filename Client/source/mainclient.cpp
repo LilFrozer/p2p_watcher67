@@ -4,32 +4,8 @@
 MainClient::MainClient(QWidget *parent, boost::asio::io_context &io)
     : QMainWindow(parent)
     , ui(new Ui::MainClient)
-    , plot_{std::make_unique<QCustomPlot>(this)}
 {
     ui->setupUi(this);
-
-    ui->plot->addWidget(plot_.get());
-
-    plot_->addGraph();
-    // plot_->addGraph();
-
-    QVector<unsigned> data = parseRcvFile("/Users/alekseypodoplelov/Downloads/1rcvdata.txt");
-    qDebug() << "data_size=" << data.size();
-
-    QVector<double> sin, x, cos, amp;
-
-    for(size_t i{};i<data.size();++i) {
-        x.push_back(i);
-        sin.push_back(static_cast<short>(data[i] & 0xFFFF));
-        cos.push_back(static_cast<short>((data[i] >> 16) & 0xFFFF));
-        amp.push_back(static_cast<float>(sqrt(10.0)*sqrt(sin[i] * sin[i]/10.0 + cos[i] * cos[i]/10.0)));
-    }
-    plot_->graph(0)->setData(x, amp);
-    plot_->graph(0)->setPen(QPen(Qt::blue));
-    // plot_->graph(1)->setData(x, cos);
-    // plot_->graph(1)->setPen(QPen(Qt::red));
-    plot_->rescaleAxes();
-    plot_->replot();
 
     QObject::connect(ui->qpsh_connect, &QPushButton::clicked, this, &MainClient::slot_connect);
     QObject::connect(ui->qpsh_disconnect, &QPushButton::clicked, this, &MainClient::slot_disconnect);
@@ -67,5 +43,59 @@ void MainClient::slot_send()
     for( size_t i=0;i<5;++i )
         _struct.d.push_back(i+i*i);
 
+    CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
+    if (!screenshot)
+        throw std::runtime_error("");
+
+    image_ = imageToBytes(screenshot);
+
+    CGImageRelease(screenshot);
+
+    QImage image(image_.data(), 2880, 1800, 2880 * 4, QImage::Format_RGBA8888);
+    QPixmap pixmap = QPixmap::fromImage(image);
+    if (pixmap.isNull())
+        throw std::runtime_error("Не удалось создать QPixmap");
+
+    ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
+
     Iserver_->async_write(proto_project::dpt::TestStruct, _struct.serilize());
+}
+
+vU8 MainClient::imageToBytes(CGImageRef cgImage)
+{
+    if (!cgImage)
+        return {};
+
+    size_t width = CGImageGetWidth(cgImage);
+    size_t height = CGImageGetHeight(cgImage);
+    size_t bitsPerPixel = CGImageGetBitsPerPixel(cgImage);
+    size_t bytesPerRow = CGImageGetBytesPerRow(cgImage);
+
+    // !!!Создаём контекст для извлечения данных в формате RGBA!!!
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    vU8 rawData(height * bytesPerRow);
+
+    CGContextRef context = CGBitmapContextCreate(
+        rawData.data(),
+        width,
+        height,
+        8,              // bits per component
+        bytesPerRow,
+        colorSpace,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
+    );
+
+    if (!context) {
+        CGColorSpaceRelease(colorSpace);
+        return {};
+    }
+
+    // !!!Рисуем изображение в контекст, чтобы получить пиксельные данные!!!
+    CGRect rect = CGRectMake(0, 0, width, height);
+    CGContextDrawImage(context, rect, cgImage);
+
+    CGContextRelease(context);
+    CGColorSpaceRelease(colorSpace);
+
+    return rawData;
 }

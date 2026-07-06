@@ -86,14 +86,14 @@ public:
 
 #include <boost/asio.hpp>
 
-using tcpNamespace = boost::asio::ip::tcp;
+using boost_tcp = boost::asio::ip::tcp;
 
 class BoostConnection : public IConnection, public std::enable_shared_from_this<BoostConnection>
 {
 private:
-    tcpNamespace::socket socket_;
-    tcpNamespace::resolver resolver_;
-    unsigned size_{0};
+    boost_tcp::socket socket_{nullptr};
+    boost_tcp::resolver resolver_{nullptr};
+    u32 size_{0};
     vU8 buffer_{};
 private:
     void handle_error(const boost::system::error_code& ec, const str& context);
