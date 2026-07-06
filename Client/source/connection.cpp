@@ -1,8 +1,8 @@
 #include "connection.h"
 
-BoostConnection::BoostConnection(boost::asio::io_context &io_context) :
-    socket_{io_context},
-    resolver_{io_context}
+BoostConnection::BoostConnection(boost::asio::io_context &ctx) :
+    udp_var_(std::make_unique<UdpVar>(ctx))
+    , tcp_var_(std::make_unique<TcpVar>(ctx))
 {
     std::cout << "initializing Iserver" << std::endl;
 }
@@ -12,45 +12,39 @@ BoostConnection::~BoostConnection()
     this->disconnect();
 }
 
-void BoostConnection::connect(const str &host, const u16 port)
+void BoostConnection::connect( const str &host, const u16 port )
 {
-    try
-    {
-        resolver_.async_resolve(host, std::to_string(port), [this](boost::system::error_code ec, boost_tcp::resolver::results_type endpoints)
-        {
-            if( ec )
-            {
+    try {
+        tcp_var_->resolver.async_resolve(host, std::to_string(port), [this](boost::system::error_code ec, asio::ip::tcp::resolver::results_type endpoints) {
+            if (ec) {
                 this->handle_error(ec, "resolve");
                 return;
             }
-            boost::asio::async_connect(socket_, endpoints, [this](boost::system::error_code ec, boost_tcp::endpoint)
+            boost::asio::async_connect(tcp_var_->socket, endpoints, [this](boost::system::error_code ec, asio::ip::tcp::endpoint)
             {
-                if( ec )
-                {
+                if (ec) {
                     this->handle_error(ec, "connect");
-                }
-                else
-                {
+                } else {
                     std::cout << "Connected to server!" << std::endl;
                     this->async_read();
                 }
              });
         });
     } catch (const std::exception &e) {
-        std::cout << e.what() << std::endl;
+        std::cerr << e.what() << std::endl;
     }
 }
 
 void BoostConnection::async_read() {
     auto self = shared_from_this();
-    boost::asio::async_read(socket_, boost::asio::buffer(&size_, sizeof(size_)),
+    boost::asio::async_read(tcp_var_->socket, boost::asio::buffer(&tcp_var_->size, sizeof(tcp_var_->size)),
         [this, self](boost::system::error_code ec, size_t) {
         if (ec == boost::asio::error::eof) {
             std::cerr << "Client disconnected" << std::endl;
             return;
         }
-        buffer_.resize(size_);
-        boost::asio::async_read(socket_, boost::asio::buffer(buffer_),
+        tcp_var_->buffer.resize(tcp_var_->size);
+        boost::asio::async_read(tcp_var_->socket, boost::asio::buffer(tcp_var_->buffer),
         [this, self](boost::system::error_code ec, size_t) {
             if (ec) {
                 std::cerr << "Body read error: " << ec.message() << std::endl;
@@ -66,26 +60,26 @@ void BoostConnection::process_packet() {
     unsigned offset = 0;
 
     proto_project::Packet pkt;
-    memcpy(&pkt.header.server_hash, &(this->buffer_)[offset], 2);
+    memcpy(&pkt.header.server_hash, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.total_data_size, &(this->buffer_)[offset], 4);
+    memcpy(&pkt.header.total_data_size, &(tcp_var_->buffer)[offset], 4);
     offset += 4;
-    memcpy(&pkt.header.total_cnt_packets, &(this->buffer_)[offset], 2);
+    memcpy(&pkt.header.total_cnt_packets, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.cur_packet_number, &(this->buffer_)[offset], 2);
+    memcpy(&pkt.header.cur_packet_number, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.cur_packet_size, &(this->buffer_)[offset], 2);
+    memcpy(&pkt.header.cur_packet_size, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    uint8_t flags = (this->buffer_)[offset];
+    uint8_t flags = (tcp_var_->buffer)[offset];
     pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
     pkt.header.isLast = (flags & 0x02) ? 1 : 0;
     offset += 2;
-    memcpy(&pkt.d_type, &(this->buffer_)[offset], 2);
+    memcpy(&pkt.d_type, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
 
-    pkt.buffer.assign((this->buffer_).begin() + offset, (this->buffer_).end());
+    pkt.buffer.assign((tcp_var_->buffer).begin() + offset, (tcp_var_->buffer).end());
 
-    if ( pkt.header.server_hash != proto_project::kServerHash ) {
+    if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
         std::cerr << "ERROR -> != kServerHash" << std::endl;
         return;
     }
@@ -113,6 +107,11 @@ void BoostConnection::process_packet() {
         tcp_data::FirstData a = tcp_data::FirstData::deserialize(pkt.buffer.data());
         std::cout << "addr=" << a.client_addr << std::endl;
         std::cout << "port=" << a.client_port << std::endl;
+        const auto address = asio::ip::make_address(a.client_addr);
+        const asio::ip::udp::endpoint endpoint(address, a.client_port);
+        udp_var_->socket.open(endpoint.protocol());
+        udp_var_->socket.set_option(asio::socket_base::reuse_address(true));
+        udp_var_->socket.bind(endpoint);)
         break;
     }
     default: {
@@ -124,27 +123,29 @@ void BoostConnection::process_packet() {
 
 void BoostConnection::disconnect()
 {
-    if( socket_.is_open() )
-    {
+    if (tcp_var_->socket.is_open()) {
         boost::system::error_code ec;
-        socket_.shutdown(boost_tcp::socket::shutdown_both, ec);
-        socket_.close(ec);
+        tcp_var_->socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
+        tcp_var_->socket.close(ec);
     }
-
+    if (udp_var_->socket.is_open()) {
+        boost::system::error_code ec;
+        udp_var_->socket.shutdown(ec);
+        udp_var_->socket.close(ec);
+    }
     std::cout << "Connection`s disconnect" << std::endl;
 }
 
 void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffer)
 {
-    if( !socket_.is_open() )
-    {
+    if (!tcp_var_->socket.is_open()) {
         std::cerr << "Connect to server for send!" << std::endl;
         return;
     }
 
     proto_project::Packet pkt{};
     pkt.d_type = data_type;
-    pkt.header.server_hash = proto_project::kServerHash;
+    pkt.header.server_hash = Constants::SERVER_HASH;
     pkt.header.total_data_size = buffer.size();
     pkt.header.total_cnt_packets = 1;
     pkt.header.cur_packet_number = 1;
@@ -163,14 +164,10 @@ void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffe
     std::cout << "p_size=" << packet_size << std::endl;
 
 
-    boost::asio::async_write(socket_, buffers, [this](boost::system::error_code ec, size_t length)
-    {
-        if( ec )
-        {
+    boost::asio::async_write(tcp_var_->socket, buffers, [this](boost::system::error_code ec, size_t length) {
+        if (ec) {
             handle_error(ec, "send");
-        }
-        else
-        {
+        } else {
             std::cout << "Отправлено " << length << " байт" << std::endl;
         }
     });

@@ -3,15 +3,20 @@
 
 #include <iostream>
 #include "GroupData.h"
+#include <boost/asio.hpp>
+
+namespace Constants {
+    const u16 SERVER_HASH = 1337;
+    const u16 SERVER_PORT = 1122;
+    const u16 BUFFER_SIZE = 1024;
+}
 
 namespace proto_project
 {
-const u16 kServerHash = 0x1337;
-const u16 kServerPort = 1122;
 
 struct PacketHeader
 {
-    u16 server_hash{kServerHash};
+    u16 server_hash{Constants::SERVER_HASH};
 
     u32 total_data_size{0x0};
     u16 total_cnt_packets{0x0};
@@ -31,7 +36,7 @@ struct Packet
     phr header{};
     dpt d_type{dpt::TestStruct};
     vU8 buffer{};
-    static vU8 serialize(Packet &pkt) {
+    static vU8 serialize( Packet &pkt ) {
         vU8 buf{};
 
         buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.server_hash),
@@ -67,9 +72,9 @@ struct Packet
 class IConnection
 {
 public:
-    virtual void connect(const str &host, const uint16_t port) = 0;
+    virtual void connect( const str &host, const u16 port ) = 0;
     virtual void disconnect() = 0;
-    virtual void async_write(proto_project::dpt data_type, const vU8 &buffer) = 0;
+    virtual void async_write( proto_project::dpt data_type, const vU8 &buffer ) = 0;
     virtual void async_read() = 0;
     virtual void process_packet() = 0;
     virtual ~IConnection() = default;
@@ -84,25 +89,34 @@ public:
 //     void disconnect() override final;
 // };
 
-#include <boost/asio.hpp>
+namespace asio = boost::asio;
 
-using boost_tcp = boost::asio::ip::tcp;
+struct UdpVar {
+    asio::ip::udp::socket socket{nullptr};
+    std::array<char, Constants::BUFFER_SIZE> buffer{};
+    UdpVar( asio::io_context &ctx ) : socket(ctx) {}
+};
+
+struct TcpVar {
+    asio::ip::tcp::socket socket{nullptr};
+    asio::ip::tcp::resolver resolver{nullptr};
+    u32 size{0};
+    vU8 buffer{};
+    TcpVar( asio::io_context &ctx ) : socket(ctx), resolver(ctx) {}
+};
 
 class BoostConnection : public IConnection, public std::enable_shared_from_this<BoostConnection>
 {
-private:
-    boost_tcp::socket socket_{nullptr};
-    boost_tcp::resolver resolver_{nullptr};
-    u32 size_{0};
-    vU8 buffer_{};
-private:
-    void handle_error(const boost::system::error_code& ec, const str& context);
+protected:
+    std::unique_ptr<UdpVar> udp_var_{nullptr};
+    std::unique_ptr<TcpVar> tcp_var_{nullptr};
 public:
-    BoostConnection(boost::asio::io_context &io_context);
-    ~BoostConnection();
-    void connect(const str &host, const u16 port) override final;
+    void handle_error( const boost::system::error_code& ec, const str& context );
+    BoostConnection( boost::asio::io_context &ctx);
+    ~BoostConnection() override;
+    void connect( const str &host, const u16 port ) override final;
     void disconnect() override final;
-    void async_write(proto_project::dpt data_type, const vU8 &buffer) override final;
+    void async_write( proto_project::dpt data_type, const vU8 &buffer ) override final;
     void async_read() override final;
     void process_packet() override final;
 };

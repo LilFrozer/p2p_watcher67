@@ -1,4 +1,4 @@
-#include <CssWork.h>
+#include <crc.h>
 
 #include <exception>
 #include <fstream>
@@ -7,16 +7,15 @@
 #include <vector>
 #include <iostream>
 
-int CssWork::CalcCrc(std::vector<uint8_t> &bytes, ModeCalcCrc mode)
-{
+int Crc::CalcCrc(std::vector<uint8_t> &bytes, ModeCrc mode) {
     int res = 0;
     switch(mode)
     {
     /**
-    *   Ваня использует полином = 0x1021
+    *   использует полином = 0x1021
     *   для вычисления CRC16
     */
-    case ModeCalcCrc::Sav:
+    case ModeCrc::func:
     {
         int crc = 0, poly = 0x1021;
         for (size_t i=0;i<bytes.size();++i) {
@@ -33,10 +32,10 @@ int CssWork::CalcCrc(std::vector<uint8_t> &bytes, ModeCalcCrc mode)
         break;
     }
     /**
-     * Мальцев использует файл с таблицей для
+     * использует файл с таблицей для
      * быстрого вычисления CRC16
      */
-    case ModeCalcCrc::Malcev:
+    case ModeCrc::table:
     {
         /**
          * unpack crc table from crc.dat
@@ -70,8 +69,7 @@ int CssWork::CalcCrc(std::vector<uint8_t> &bytes, ModeCalcCrc mode)
     return res;
 }
 
-std::vector<uint8_t> CssWork::hexToBytes(const std::string& hex)
-{
+std::vector<uint8_t> Crc::hexToBytes(const std::string& hex) {
     std::vector<uint8_t> bytes;
     for (size_t i = 0; i < hex.length(); i += 2) {
         std::string byteString = hex.substr(i, 2);
@@ -81,12 +79,11 @@ std::vector<uint8_t> CssWork::hexToBytes(const std::string& hex)
     return bytes;
 }
 
-void CssWork::testCrc(std::string strHexBytes)
-{
+void Crc::testCrc(std::string strHexBytes) {
     try {
-        std::vector<uint8_t> bytes = CssWork::hexToBytes(strHexBytes);
-        std::cout << std::hex << CssWork::CalcCrc(bytes, ModeCalcCrc::Sav) << std::endl;
-        std::cout << std::hex << CssWork::CalcCrc(bytes, ModeCalcCrc::Malcev) << std::endl;
+        std::vector<uint8_t> bytes = Crc::hexToBytes(strHexBytes);
+        std::cout << std::hex << Crc::CalcCrc(bytes, ModeCrc::func) << std::endl;
+        std::cout << std::hex << Crc::CalcCrc(bytes, ModeCrc::table) << std::endl;
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
     }

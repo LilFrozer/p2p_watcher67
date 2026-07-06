@@ -18,14 +18,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(Server
     source/main.cpp
-    source/CssWork.cpp
+        source/crc.cpp
     source/Server.cpp
     include/Server.h
     source/ClientSession.cpp
     include/ClientSession.h
     include/GroupData.h
-    source/ImitatorFar.cpp
-    include/ImitatorFar.h
         include/Logger.h
 )
 

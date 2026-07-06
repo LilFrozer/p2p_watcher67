@@ -24,8 +24,7 @@ MainClient::~MainClient()
 void MainClient::slot_connect()
 {
     QString host = ui->qlineedit_host->text();
-    std::cout << "trying connect. addr:" << host.toStdString() << std::endl;
-    Iserver_->connect(host.toStdString(), proto_project::kServerPort);
+    Iserver_->connect(host.toStdString(), Constants::SERVER_PORT);
 }
 
 void MainClient::slot_disconnect()

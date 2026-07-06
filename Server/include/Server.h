@@ -1,13 +1,10 @@
 
 #pragma once
 
-#include "ImitatorFar.h"
 #include "ClientSession.h"
 #include <unordered_map>
 #include <atomic>
 #include "Logger.h"
-
-#define BUFFER_SIZE 1024
 
 struct ClientInfo {
     str addr{""};
@@ -25,7 +22,7 @@ class IInterface {
 public:
     virtual void startListenTcp( const str &ip_str, const u16 &port ) = 0;
     virtual void startListenUdp( const str &ip_str, const u16 &port ) = 0;
-    virtual ~IInterface() {};
+    virtual ~IInterface() = default;
 };
 
 // class PosixServer : public IInterface {
@@ -46,7 +43,7 @@ using std::unordered_map;
 
 struct UdpVar {
     asio::ip::udp::socket socket{nullptr};
-    array<char, BUFFER_SIZE> buffer{};
+    array<char, Constants::BUFFER_SIZE> buffer{};
     explicit UdpVar( asio::io_context &ctx ) : socket(ctx) {}
 };
 
@@ -57,8 +54,8 @@ struct TcpVar {
 
 class BoostServer : public std::enable_shared_from_this<BoostServer>, public IInterface {
 protected:
-    std::unique_ptr<UdpVar> u{nullptr};
-    std::unique_ptr<TcpVar> t{nullptr};
+    std::unique_ptr<UdpVar> udp_var_{nullptr};
+    std::unique_ptr<TcpVar> tcp_var_{nullptr};
     unordered_map<u32, ClientInfo> clients_{};
 public:
     void startListenTcp( const str &ip_str, const u16 &port ) override;

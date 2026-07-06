@@ -9,6 +9,7 @@ namespace Constants {
     const str SERVER_ADDR{"172.20.10.10"};
     const u16 SERVER_HASH{0x1337};
     const u16 SERVER_PORT{1122};
+    const u16 BUFFER_SIZE = 1024;
 }
 
 namespace proto_project {
