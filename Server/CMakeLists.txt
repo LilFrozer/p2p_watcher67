@@ -26,6 +26,7 @@ add_executable(Server
     include/GroupData.h
     source/ImitatorFar.cpp
     include/ImitatorFar.h
+        include/Logger.h
 )
 
 target_include_directories(Server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

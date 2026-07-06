@@ -2,14 +2,18 @@
 #pragma once
 
 #include "GroupData.h"
+#include <boost/asio.hpp>
+#include "Logger.h"
+
+namespace Constants {
+    const str SERVER_ADDR{"172.20.10.10"};
+    const u16 SERVER_HASH{0x1337};
+    const u16 SERVER_PORT{1122};
+}
 
 namespace proto_project {
-    const str kServerAddr{"172.20.10.10"};
-    const u16 kServerHash = 0x1337;
-    const u16 kServerPort = 1122;
-
     struct PacketHeader {
-        u16 server_hash{kServerHash};
+        u16 server_hash{Constants::SERVER_HASH};
 
         u32 total_data_size{0x0};
         u16 total_cnt_packets{0x0};
@@ -65,29 +69,25 @@ namespace proto_project {
 class IClientSession
 {
 public:
-    virtual ~IClientSession() {}
     virtual void start_session() = 0;
     virtual void async_read() = 0;
     virtual void process_packet() = 0;
     virtual void async_send(proto_project::dte dtype, const vU8 &buffer) = 0;
+    virtual ~IClientSession() {};
 };
 
-#include <boost/asio.hpp>
+namespace asio = boost::asio;
 
-using boost_udp = boost::asio::ip::udp;
-using boost_tcp = boost::asio::ip::tcp;
-
-class BoostClientSession : public IClientSession, public std::enable_shared_from_this<BoostClientSession>
-{
+class BoostClientSession : public IClientSession, public std::enable_shared_from_this<BoostClientSession> {
 protected:
-    boost_tcp::socket socket_{nullptr};
-    unsigned size_{0};
+    asio::ip::tcp::socket socket_{nullptr};
+    u32 size_{0};
     vU8 buffer_{};
 public:
-    BoostClientSession(boost_tcp::socket socket);
-    ~BoostClientSession() override {};
-    void start_session() override final;
-    void async_read() override final;
-    void process_packet() override final;
-    void async_send(proto_project::dte dtype, const vU8 &buffer) override final;
+    explicit BoostClientSession(asio::ip::tcp::socket socket);
+    ~BoostClientSession() override = default;
+    void start_session() override;
+    void async_read() override;
+    void process_packet() override;
+    void async_send(proto_project::dte dtype, const vU8 &buffer) override;
 };

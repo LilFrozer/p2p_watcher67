@@ -1,8 +1,9 @@
 #include "ClientSession.h"
 #include <iostream>
 
-BoostClientSession::BoostClientSession(boost_tcp::socket socket) : socket_(std::move(socket))
+BoostClientSession::BoostClientSession(asio::ip::tcp::socket socket) : socket_(std::move(socket))
 {
+    Log::instance()("NewClient!", LoggerMode::info);
 }
 
 void BoostClientSession::start_session()
@@ -12,17 +13,17 @@ void BoostClientSession::start_session()
 
 void BoostClientSession::async_read() {
     auto self = shared_from_this();
-    boost::asio::async_read(socket_, boost::asio::buffer(&size_, sizeof(size_)),
+    asio::async_read(socket_, asio::buffer(&size_, sizeof(size_)),
         [this, self](boost::system::error_code ec, size_t) {
         if (ec == boost::asio::error::eof) {
-            std::cerr << "Client disconnected" << std::endl;
+            Log::instance()("ClientDisconnected!", LoggerMode::error);
             return;
         }
         buffer_.resize(size_);
-        boost::asio::async_read(socket_, boost::asio::buffer(buffer_),
+        asio::async_read(socket_, asio::buffer(buffer_),
             [this, self](boost::system::error_code ec, size_t) {
             if (ec) {
-                std::cerr << "Body read error: " << ec.message() << std::endl;
+                Log::instance()(ec.message(), LoggerMode::error);
                 return;
             }
             this->process_packet();
@@ -56,7 +57,7 @@ void BoostClientSession::process_packet()
 
     pkt.buffer.assign((this->buffer_).begin() + offset, (this->buffer_).end());
 
-    if ( pkt.header.server_hash != proto_project::kServerHash ) {
+    if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
         std::cerr << "ERROR -> != kServerHash" << std::endl;
         return;
     }
@@ -88,14 +89,13 @@ void BoostClientSession::process_packet()
 }
 
 void BoostClientSession::async_send(proto_project::dte dtype, const vU8 &buffer) {
-    if( !socket_.is_open() )
-    {
-        std::cerr << "Connecting error!" << std::endl;
+    if( !socket_.is_open() ) {
+        Log::instance()("socket`s not connected!", LoggerMode::error);
         return;
     }
 
     proto_project::Packet pkt{};
-    pkt.header.server_hash = proto_project::kServerHash;
+    pkt.header.server_hash = Constants::SERVER_HASH;
     pkt.header.total_cnt_packets = 1;
     pkt.header.total_data_size = buffer.size();
     pkt.header.cur_packet_size = buffer.size() + sizeof(proto_project::PacketHeader) + sizeof(u16);
@@ -107,15 +107,15 @@ void BoostClientSession::async_send(proto_project::dte dtype, const vU8 &buffer)
     vU8 full_packet = proto_project::Packet::serialize(pkt);
 
     u32 size = full_packet.size();
-    std::vector<boost::asio::const_buffer> buffers;
-    buffers.push_back(boost::asio::buffer(&size, 4));
-    buffers.push_back(boost::asio::buffer(full_packet));
+    std::vector<asio::const_buffer> buffers{};
+    buffers.emplace_back(asio::buffer(&size, 4));
+    buffers.emplace_back(asio::buffer(full_packet));
 
     boost::asio::async_write(this->socket_, buffers, [this](boost::system::error_code ec, size_t length) {
         if ( ec ) {
-            std::cerr << "fck send!" << std::endl;
+            Log::instance()("socket send err!", LoggerMode::error);
         } else {
-            std::cout << "Sended " << length << "bytes" << std::endl;
+            Log::instance()("sended..." + std::to_string(length) + "bytes", LoggerMode::info);
         }
     });
 }

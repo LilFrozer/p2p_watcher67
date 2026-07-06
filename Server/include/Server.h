@@ -1,39 +1,70 @@
-/*
- *  1. IServer = Имитатор ФАР, аналог VIOD, шлет ответы
- *  2. BoostServer = Сервер, написанный исключительно на boost::asio
- *  3. PosixServer = Сервер, написанный исключительно на системных сокетах
- */
 
 #pragma once
 
 #include "ImitatorFar.h"
 #include "ClientSession.h"
+#include <unordered_map>
+#include <atomic>
+#include "Logger.h"
 
-class IServer {
-protected:
-    std::unique_ptr<ImitatorFar> imitator_far_;
-public:
-    IServer();
-    virtual void ListenTcp() = 0;
-    virtual ~IServer() {}
+#define BUFFER_SIZE 1024
+
+struct ClientInfo {
+    str addr{""};
+    u16 port{0};
+    bool operator==( const ClientInfo &rhs ) const {
+        return addr == rhs.addr && port == rhs.port;
+    }
 };
+
+enum class errors : u8 {
+    Success = 0,
+};
+
+class IInterface {
+public:
+    virtual void startListenTcp( const str &ip_str, const u16 &port ) = 0;
+    virtual void startListenUdp( const str &ip_str, const u16 &port ) = 0;
+    virtual ~IInterface() {};
+};
+
+// class PosixServer : public IInterface {
+//     std::atomic<bool> isRunning_{true};
+//     int tcp_socket_{-1}, udp_socket_{-1};
+// public:
+//     errors Initialize() override;
+//     errors ListenTcp(const str &addr, const u16 &port) override;
+//     errors ListenUdp(const str &addr, const u16 &port) override;
+//     ~PosixServer() override;
+// };
 
 // --- boost::asio ---
 
-class BoostServer : public std::enable_shared_from_this<BoostServer>, public IServer
-{
-private:
-    // --- udp ---
-    boost_udp::socket   udp_socker_{nullptr};
-    boost_udp::endpoint udp_endPoint_{};
-    std::array<char, 1024> udp_recvBuffer_{};
-    // --- tcp ---
-    boost_tcp::acceptor tcp_acceptor_;
+namespace asio = boost::asio;
+using std::array;
+using std::unordered_map;
+
+struct UdpVar {
+    asio::ip::udp::socket socket{nullptr};
+    array<char, BUFFER_SIZE> buffer{};
+    explicit UdpVar( asio::io_context &ctx ) : socket(ctx) {}
+};
+
+struct TcpVar {
+    asio::ip::tcp::acceptor acceptor{nullptr};
+    explicit TcpVar( asio::io_context &ctx ) : acceptor(ctx) {}
+};
+
+class BoostServer : public std::enable_shared_from_this<BoostServer>, public IInterface {
+protected:
+    std::unique_ptr<UdpVar> u{nullptr};
+    std::unique_ptr<TcpVar> t{nullptr};
+    unordered_map<u32, ClientInfo> clients_{};
 public:
-    void ListenTcp() override;
-    BoostServer(boost::asio::io_context& io_context,
-                const std::string &addr,
-                const uint16_t &port);
+    void startListenTcp( const str &ip_str, const u16 &port ) override;
+    void startListenUdp( const str &ip_str, const u16 &port ) override;
+    BoostServer(asio::io_context& ctx);
     ~BoostServer() override;
+    void continueListening();
 };
 
