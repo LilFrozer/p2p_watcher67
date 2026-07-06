@@ -3,6 +3,7 @@
 BoostServer::BoostServer( asio::io_context& ctx ) :
     udp_var_(std::make_unique<UdpVar>(ctx))
     , tcp_var_(std::make_unique<TcpVar>(ctx))
+    , timer_(std::make_shared<asio::steady_timer>(ctx))
 {
     Log::instance()("Initialization...", LoggerMode::info);
 }
@@ -45,12 +46,50 @@ void BoostServer::continueListening() {
                 clInfo.client_addr = ip;
                 const u16 port = remote_ep.port();
                 clInfo.client_port = port;
-                const auto cl = std::make_shared<BoostClientSession>(std::move(socket));
+                static u32 id = 0;
+                clients_[id] = ClientInfo{clInfo.client_addr, clInfo.client_port};
+                const auto cl = std::make_shared<BoostClientSession>(std::move(socket), id);
+                cl->get_deleting_signal().connect(boost::bind(&BoostServer::removeClient, this, boost::placeholders::_1));
                 cl->async_send(proto_project::dte::FirstData, clInfo.serialize());
                 cl->start_session();
+                ++id;
             }
         }
         this->continueListening();
     }
     );
+}
+
+void BoostServer::removeClient(u32 id) {
+    Log::instance()("Removing client. id:" + std::to_string(id), LoggerMode::info);
+    auto it = clients_.find(id);
+    clients_.erase(it);
+}
+
+void BoostServer::startTimer() {
+    timer_->expires_after(std::chrono::seconds(5));
+    timer_->async_wait([this](const boost::system::error_code& ec) {
+        if (!ec) {
+            sendUdpData();
+            startTimer();
+        } else {
+            Log::instance()("timer err:" + ec.message(), LoggerMode::error);
+        }
+    });
+}
+
+void BoostServer::sendUdpData() {
+    str message = "Hello from Boost.Asio! Timestamp: " + std::to_string(std::time(nullptr));
+    for (const auto &i : clients_) {
+        const auto address = asio::ip::make_address(i.second.addr);
+        const asio::ip::udp::endpoint _endpoint(address, i.second.port);
+        udp_var_->socket.async_send_to(asio::buffer(message), _endpoint,
+        [](const boost::system::error_code& ec, std::size_t /*bytes_sent*/) {
+            if (ec) {
+                Log::instance()("Send error:" + ec.message(), LoggerMode::error);
+            } else {
+                Log::instance()("Message send successfully.", LoggerMode::info);
+            }
+        });
+    }
 }

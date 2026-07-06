@@ -1,7 +1,9 @@
 #include "ClientSession.h"
 #include <iostream>
 
-BoostClientSession::BoostClientSession(asio::ip::tcp::socket socket) : socket_(std::move(socket))
+BoostClientSession::BoostClientSession(asio::ip::tcp::socket socket, const u32 &id) :
+    socket_(std::move(socket))
+    , id_{id}
 {
     Log::instance()("NewClient!", LoggerMode::info);
 }
@@ -16,6 +18,7 @@ void BoostClientSession::async_read() {
     asio::async_read(socket_, asio::buffer(&size_, sizeof(size_)),
         [this, self](boost::system::error_code ec, size_t) {
         if (ec == boost::asio::error::eof) {
+            signalDeleting_(id_);
             Log::instance()("ClientDisconnected!", LoggerMode::error);
             return;
         }

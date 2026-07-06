@@ -12,6 +12,27 @@ BoostConnection::~BoostConnection()
     this->disconnect();
 }
 
+void BoostConnection::start_receive() {
+    udp_var_->socket.async_receive_from(asio::buffer(udp_var_->buffer), udp_var_->remote_endpoint,
+        [this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
+            if (ec) {
+                std::cerr << "Receive error: " << ec.message() << std::endl;
+                return;
+            }
+            if (bytes_transferred > 0) {
+                std::string received_data(udp_var_->buffer.data(), bytes_transferred);
+                std::cout << "Received from "
+                          << udp_var_->remote_endpoint.address().to_string()
+                          << ":" << udp_var_->remote_endpoint.port()
+                          << " -> " << received_data << std::endl;
+            }
+            if (udp_var_->socket.is_open()) {
+                start_receive();
+            }
+        }
+    );
+}
+
 void BoostConnection::connect( const str &host, const u16 port )
 {
     try {
@@ -111,7 +132,8 @@ void BoostConnection::process_packet() {
         const asio::ip::udp::endpoint endpoint(address, a.client_port);
         udp_var_->socket.open(endpoint.protocol());
         udp_var_->socket.set_option(asio::socket_base::reuse_address(true));
-        udp_var_->socket.bind(endpoint);)
+        udp_var_->socket.bind(endpoint);
+        this->start_receive();
         break;
     }
     default: {
@@ -130,7 +152,6 @@ void BoostConnection::disconnect()
     }
     if (udp_var_->socket.is_open()) {
         boost::system::error_code ec;
-        udp_var_->socket.shutdown(ec);
         udp_var_->socket.close(ec);
     }
     std::cout << "Connection`s disconnect" << std::endl;

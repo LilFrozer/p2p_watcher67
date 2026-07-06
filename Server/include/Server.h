@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <atomic>
 #include "Logger.h"
+#include <chrono>
 
 struct ClientInfo {
     str addr{""};
@@ -22,6 +23,8 @@ class IInterface {
 public:
     virtual void startListenTcp( const str &ip_str, const u16 &port ) = 0;
     virtual void startListenUdp( const str &ip_str, const u16 &port ) = 0;
+    virtual void startTimer() = 0;
+    virtual void sendUdpData() = 0;
     virtual ~IInterface() = default;
 };
 
@@ -57,11 +60,15 @@ protected:
     std::unique_ptr<UdpVar> udp_var_{nullptr};
     std::unique_ptr<TcpVar> tcp_var_{nullptr};
     unordered_map<u32, ClientInfo> clients_{};
+    std::shared_ptr<asio::steady_timer> timer_{nullptr};
 public:
     void startListenTcp( const str &ip_str, const u16 &port ) override;
     void startListenUdp( const str &ip_str, const u16 &port ) override;
     BoostServer(asio::io_context& ctx);
     ~BoostServer() override;
     void continueListening();
+    void startTimer() override;
+    void sendUdpData() override;
+    void removeClient(u32 id);
 };
 

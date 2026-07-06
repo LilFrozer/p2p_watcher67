@@ -42,59 +42,59 @@ void MainClient::slot_send()
     for( size_t i=0;i<5;++i )
         _struct.d.push_back(i+i*i);
 
-    CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
-    if (!screenshot)
-        throw std::runtime_error("");
+    // CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
+    // if (!screenshot)
+    //     throw std::runtime_error("");
 
-    image_ = imageToBytes(screenshot);
+    // image_ = imageToBytes(screenshot);
 
-    CGImageRelease(screenshot);
+    // CGImageRelease(screenshot);
 
-    QImage image(image_.data(), 2880, 1800, 2880 * 4, QImage::Format_RGBA8888);
-    QPixmap pixmap = QPixmap::fromImage(image);
-    if (pixmap.isNull())
-        throw std::runtime_error("Не удалось создать QPixmap");
+    // QImage image(image_.data(), 2880, 1800, 2880 * 4, QImage::Format_RGBA8888);
+    // QPixmap pixmap = QPixmap::fromImage(image);
+    // if (pixmap.isNull())
+    //     throw std::runtime_error("Не удалось создать QPixmap");
 
-    ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
+    // ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
 
     Iserver_->async_write(proto_project::dpt::TestStruct, _struct.serilize());
 }
 
-vU8 MainClient::imageToBytes(CGImageRef cgImage)
-{
-    if (!cgImage)
-        return {};
+// vU8 MainClient::imageToBytes(CGImageRef cgImage)
+// {
+//     if (!cgImage)
+//         return {};
 
-    size_t width = CGImageGetWidth(cgImage);
-    size_t height = CGImageGetHeight(cgImage);
-    size_t bitsPerPixel = CGImageGetBitsPerPixel(cgImage);
-    size_t bytesPerRow = CGImageGetBytesPerRow(cgImage);
+//     size_t width = CGImageGetWidth(cgImage);
+//     size_t height = CGImageGetHeight(cgImage);
+//     size_t bitsPerPixel = CGImageGetBitsPerPixel(cgImage);
+//     size_t bytesPerRow = CGImageGetBytesPerRow(cgImage);
 
-    // !!!Создаём контекст для извлечения данных в формате RGBA!!!
-    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-    vU8 rawData(height * bytesPerRow);
+//     // !!!Создаём контекст для извлечения данных в формате RGBA!!!
+//     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+//     vU8 rawData(height * bytesPerRow);
 
-    CGContextRef context = CGBitmapContextCreate(
-        rawData.data(),
-        width,
-        height,
-        8,              // bits per component
-        bytesPerRow,
-        colorSpace,
-        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
-    );
+//     CGContextRef context = CGBitmapContextCreate(
+//         rawData.data(),
+//         width,
+//         height,
+//         8,              // bits per component
+//         bytesPerRow,
+//         colorSpace,
+//         kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
+//     );
 
-    if (!context) {
-        CGColorSpaceRelease(colorSpace);
-        return {};
-    }
+//     if (!context) {
+//         CGColorSpaceRelease(colorSpace);
+//         return {};
+//     }
 
-    // !!!Рисуем изображение в контекст, чтобы получить пиксельные данные!!!
-    CGRect rect = CGRectMake(0, 0, width, height);
-    CGContextDrawImage(context, rect, cgImage);
+//     // !!!Рисуем изображение в контекст, чтобы получить пиксельные данные!!!
+//     CGRect rect = CGRectMake(0, 0, width, height);
+//     CGContextDrawImage(context, rect, cgImage);
 
-    CGContextRelease(context);
-    CGColorSpaceRelease(colorSpace);
+//     CGContextRelease(context);
+//     CGColorSpaceRelease(colorSpace);
 
-    return rawData;
-}
+//     return rawData;
+// }

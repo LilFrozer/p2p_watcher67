@@ -4,10 +4,11 @@
 #include "GroupData.h"
 #include <boost/asio.hpp>
 #include "Logger.h"
+#include <boost/signals2.hpp>
 
 namespace Constants {
-    const str SERVER_ADDR{"172.20.10.10"};
-    const u16 SERVER_HASH{0x1337};
+    const str SERVER_ADDR{"10.44.159.2"};
+    const u16 SERVER_HASH{1337};
     const u16 SERVER_PORT{1122};
     const u16 BUFFER_SIZE = 1024;
 }
@@ -74,21 +75,24 @@ public:
     virtual void async_read() = 0;
     virtual void process_packet() = 0;
     virtual void async_send(proto_project::dte dtype, const vU8 &buffer) = 0;
-    virtual ~IClientSession() {};
+    virtual ~IClientSession() = default;
 };
 
 namespace asio = boost::asio;
 
 class BoostClientSession : public IClientSession, public std::enable_shared_from_this<BoostClientSession> {
 protected:
+    u32 id_{0};
     asio::ip::tcp::socket socket_{nullptr};
     u32 size_{0};
     vU8 buffer_{};
+    boost::signals2::signal<void(u32)> signalDeleting_;
 public:
-    explicit BoostClientSession(asio::ip::tcp::socket socket);
+    explicit BoostClientSession(asio::ip::tcp::socket socket, const u32 &id);
     ~BoostClientSession() override = default;
     void start_session() override;
     void async_read() override;
     void process_packet() override;
     void async_send(proto_project::dte dtype, const vU8 &buffer) override;
+    boost::signals2::signal<void(u32)> &get_deleting_signal() { return signalDeleting_; }
 };

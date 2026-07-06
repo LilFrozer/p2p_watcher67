@@ -77,6 +77,7 @@ public:
     virtual void async_write( proto_project::dpt data_type, const vU8 &buffer ) = 0;
     virtual void async_read() = 0;
     virtual void process_packet() = 0;
+    virtual void start_receive() = 0;
     virtual ~IConnection() = default;
 };
 
@@ -93,6 +94,7 @@ namespace asio = boost::asio;
 
 struct UdpVar {
     asio::ip::udp::socket socket{nullptr};
+    asio::ip::udp::endpoint remote_endpoint{};
     std::array<char, Constants::BUFFER_SIZE> buffer{};
     UdpVar( asio::io_context &ctx ) : socket(ctx) {}
 };
@@ -114,11 +116,12 @@ public:
     void handle_error( const boost::system::error_code& ec, const str& context );
     BoostConnection( boost::asio::io_context &ctx);
     ~BoostConnection() override;
-    void connect( const str &host, const u16 port ) override final;
-    void disconnect() override final;
-    void async_write( proto_project::dpt data_type, const vU8 &buffer ) override final;
-    void async_read() override final;
-    void process_packet() override final;
+    void connect( const str &host, const u16 port ) override;
+    void disconnect() override;
+    void async_write( proto_project::dpt data_type, const vU8 &buffer ) override;
+    void async_read() override;
+    void process_packet() override;
+    void start_receive() override;
 };
 
 #endif // CONNECTION_H

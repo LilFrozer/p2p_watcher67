@@ -8,9 +8,10 @@ int main(int argc, char *argv[])
     // CssWork::testCrc("A50000400002a000000000000000");
     try {
         boost::asio::io_context io_context;
-        auto Server{std::make_shared<BoostServer>(io_context)};
+        const auto Server{std::make_shared<BoostServer>(io_context)};
         Server->startListenTcp(Constants::SERVER_ADDR, Constants::SERVER_PORT);
         Server->startListenUdp(Constants::SERVER_ADDR, Constants::SERVER_PORT);
+        Server->startTimer();
         io_context.run();
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;

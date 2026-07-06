@@ -8,7 +8,7 @@
 #include "connection.h"
 #include "qcustomplot.h"
 
-#include <CoreGraphics/CoreGraphics.h>
+// #include <CoreGraphics/CoreGraphics.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -29,8 +29,8 @@ private:
     std::unique_ptr<QCustomPlot> plot_{nullptr};
 
     // (формат RGBA)
-    vU8 image_{};
-    vU8 imageToBytes(CGImageRef cgImage);
+    // vU8 image_{};
+    // vU8 imageToBytes(CGImageRef cgImage);
 private slots:
     void slot_connect();
     void slot_disconnect();
