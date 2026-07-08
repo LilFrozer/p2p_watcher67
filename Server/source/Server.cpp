@@ -60,7 +60,7 @@ void BoostServer::continueListening() {
     );
 }
 
-void BoostServer::removeClient(u32 id) {
+void BoostServer::removeClient( u32 id ) {
     Log::instance()("Removing client. id:" + std::to_string(id), LoggerMode::info);
     auto it = clients_.find(id);
     clients_.erase(it);

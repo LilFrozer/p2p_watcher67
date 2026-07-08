@@ -35,7 +35,7 @@ namespace proto_project {
         phr header{};
         dte d_type{dte::TestStruct};
         vU8 buffer{};
-        static vU8 serialize(Packet &pkt) {
+        static vU8 serialize( Packet &pkt ) {
             vU8 buf{};
 
             buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.server_hash),
@@ -74,7 +74,7 @@ public:
     virtual void start_session() = 0;
     virtual void async_read() = 0;
     virtual void process_packet() = 0;
-    virtual void async_send(proto_project::dte dtype, const vU8 &buffer) = 0;
+    virtual void async_send( proto_project::dte dtype, const vU8 &buffer ) = 0;
     virtual ~IClientSession() = default;
 };
 
@@ -88,11 +88,11 @@ protected:
     vU8 buffer_{};
     boost::signals2::signal<void(u32)> signalDeleting_;
 public:
-    explicit BoostClientSession(asio::ip::tcp::socket socket, const u32 &id);
+    explicit BoostClientSession( asio::ip::tcp::socket socket, const u32 &id );
     ~BoostClientSession() override = default;
     void start_session() override;
     void async_read() override;
     void process_packet() override;
-    void async_send(proto_project::dte dtype, const vU8 &buffer) override;
+    void async_send( proto_project::dte dtype, const vU8 &buffer ) override;
     boost::signals2::signal<void(u32)> &get_deleting_signal() { return signalDeleting_; }
 };

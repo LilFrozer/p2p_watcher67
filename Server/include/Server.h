@@ -69,6 +69,6 @@ public:
     void continueListening();
     void startTimer() override;
     void sendUdpData() override;
-    void removeClient(u32 id);
+    void removeClient( u32 id );
 };
 

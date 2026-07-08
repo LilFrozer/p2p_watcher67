@@ -1,7 +1,7 @@
 #include "ClientSession.h"
 #include <iostream>
 
-BoostClientSession::BoostClientSession(asio::ip::tcp::socket socket, const u32 &id) :
+BoostClientSession::BoostClientSession( asio::ip::tcp::socket socket, const u32 &id ) :
     socket_(std::move(socket))
     , id_{id}
 {
@@ -91,7 +91,7 @@ void BoostClientSession::process_packet()
     }
 }
 
-void BoostClientSession::async_send(proto_project::dte dtype, const vU8 &buffer) {
+void BoostClientSession::async_send( proto_project::dte dtype, const vU8 &buffer ) {
     if( !socket_.is_open() ) {
         Log::instance()("socket`s not connected!", LoggerMode::error);
         return;
