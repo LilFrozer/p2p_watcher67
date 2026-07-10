@@ -13,6 +13,36 @@ static_assert(sizeof(u32)==4, "sizeof(u32)!=4");
 static_assert(sizeof(u16)==2, "sizeof(u16)!=2");
 static_assert(sizeof(u8)==1, "sizeof(u8)!=1");
 
+namespace udp_data {
+enum class DataTypes : u16 {
+    TestMessage = 0x0,
+    Image = 0x1
+};
+struct TestMessage {
+    str message{""};
+    vU8 serialize() const {
+        vU8 buf{};
+        u32 strlen = htonl(message.length());
+        // !!!куда, что, сколько чего!!!
+        buf.insert(buf.end(), reinterpret_cast<u8*>(&strlen), reinterpret_cast<u8*>(&strlen) + 4);
+        buf.insert(buf.end(), message.begin(), message.end());
+        return buf;
+    }
+    static TestMessage deserialize( const u8 *buf ) {
+        TestMessage res{};
+
+        u32 offset = 0;
+        u32 _strlen = 0, strlen = 0;
+        std::memcpy(&_strlen, buf + offset, 4);
+        strlen = ntohl(_strlen);
+        offset += 4;
+        res.message.assign(reinterpret_cast<const char*>(buf + offset), strlen);
+
+        return res;
+    }
+};
+}
+
 namespace tcp_data
 {
 // При помещении в буфер строки при сериализации сначала кладем длину, а затем уже объект
@@ -22,6 +52,8 @@ enum class DataTypes : u16
     TestStruct = 0x0,
     FirstData = 0x1
 };
+
+#pragma pack(push, 1)
 // -> client opening udp socket with this info
 struct FirstData {
     str client_addr{""};
@@ -58,6 +90,9 @@ struct FirstData {
         return res;
     }
 };
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 struct TestStruct
 {
     str a{""};
@@ -141,6 +176,7 @@ struct TestStruct
         return result;
     }
 };
+#pragma pack(pop)
 }
 
 #endif // GROUPDATA_H

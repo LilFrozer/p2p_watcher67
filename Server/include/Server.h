@@ -15,39 +15,34 @@ struct ClientInfo {
     }
 };
 
-enum class errors : u8 {
-    Success = 0,
-};
-
-class IInterface {
+class IUdpInterface {
 public:
-    virtual void startListenTcp( const str &ip_str, const u16 &port ) = 0;
-    virtual void startListenUdp( const str &ip_str, const u16 &port ) = 0;
-    virtual void startTimer() = 0;
-    virtual void sendUdpData() = 0;
-    virtual ~IInterface() = default;
+    virtual void open( const str &addr, const u16 &port ) = 0;
+    virtual void listen() = 0;
+    virtual void close() = 0;
+    virtual void sendData( const str &addr, const u16 &port, const udp_data::DataTypes &data_type, const vU8 &buf ) = 0;
+    virtual void prcsPacket() = 0;
+    virtual ~IUdpInterface() = default;
 };
 
-// class PosixServer : public IInterface {
-//     std::atomic<bool> isRunning_{true};
-//     int tcp_socket_{-1}, udp_socket_{-1};
-// public:
-//     errors Initialize() override;
-//     errors ListenTcp(const str &addr, const u16 &port) override;
-//     errors ListenUdp(const str &addr, const u16 &port) override;
-//     ~PosixServer() override;
-// };
+class ITcpInterface {
+public:
+    virtual void open( const str &addr, const u16 &port ) = 0;
+    virtual void listen() = 0;
+    virtual void close() = 0;
+    virtual ~ITcpInterface() = default;
+};
 
 // --- boost::asio ---
 
 namespace asio = boost::asio;
-using std::array;
 using std::unordered_map;
 
 struct UdpVar {
     asio::ip::udp::socket socket{nullptr};
-    array<char, Constants::BUFFER_SIZE> buffer{};
-    explicit UdpVar( asio::io_context &ctx ) : socket(ctx) {}
+    asio::ip::udp::endpoint remote_endpoint{};
+    vU8 buffer{};
+    explicit UdpVar( asio::io_context &ctx ) : socket(ctx), buffer(Constants::BUFFER_SIZE, 0) {}
 };
 
 struct TcpVar {
@@ -55,20 +50,32 @@ struct TcpVar {
     explicit TcpVar( asio::io_context &ctx ) : acceptor(ctx) {}
 };
 
-class BoostServer : public std::enable_shared_from_this<BoostServer>, public IInterface {
+class AsioUdpServer : public IUdpInterface, public std::enable_shared_from_this<AsioUdpServer> {
 protected:
     std::unique_ptr<UdpVar> udp_var_{nullptr};
+public:
+    AsioUdpServer( asio::io_context &ctx );
+    ~AsioUdpServer() override = default;
+    void open( const str &addr, const u16 &port ) override;
+    void listen() override;
+    void close() override;
+    void sendData( const str &addr, const u16 &port, const udp_data::DataTypes &data_type, const vU8 &buf ) override;
+    void prcsPacket() override;
+};
+
+class AsioTcpServer : public ITcpInterface, public std::enable_shared_from_this<AsioTcpServer> {
+protected:
+    std::unique_ptr<AsioUdpServer> udp_server_{nullptr};
     std::unique_ptr<TcpVar> tcp_var_{nullptr};
     unordered_map<u32, ClientInfo> clients_{};
     std::shared_ptr<asio::steady_timer> timer_{nullptr};
 public:
-    void startListenTcp( const str &ip_str, const u16 &port ) override;
-    void startListenUdp( const str &ip_str, const u16 &port ) override;
-    BoostServer(asio::io_context& ctx);
-    ~BoostServer() override;
-    void continueListening();
-    void startTimer() override;
-    void sendUdpData() override;
-    void removeClient( u32 id );
+    void open( const str &addr, const u16 &port ) override;
+    AsioTcpServer(asio::io_context& ctx);
+    ~AsioTcpServer() override;
+    void listen() override;
+    void close() override;
+    void startTimer();
+    void removeClient( const u32 &client_id );
 };
 

@@ -8,12 +8,14 @@
 namespace Constants {
     const u16 SERVER_HASH = 1337;
     const u16 SERVER_PORT = 1122;
-    const u16 BUFFER_SIZE = 1024;
+    const u16 BUFFER_SIZE = 1472;
+    const u16 MAX_SIZE_UDP = 1472;
 }
 
 namespace proto_project
 {
 
+#pragma pack(push, 1)
 struct PacketHeader
 {
     u16 server_hash{Constants::SERVER_HASH};
@@ -25,16 +27,19 @@ struct PacketHeader
 
     u8 isFirst : 1;
     u8 isLast : 1;
-    u8 : 6;
+    u8 isCompressed: 1;
+    u8 : 5;
 };
+#pragma pack(pop)
 
 using phr = PacketHeader;
 using dpt = tcp_data::DataTypes;
 
+#pragma pack(push, 1)
 struct Packet
 {
     phr header{};
-    dpt d_type{dpt::TestStruct};
+    u16 d_type{};
     vU8 buffer{};
     static vU8 serialize( Packet &pkt ) {
         vU8 buf{};
@@ -55,7 +60,8 @@ struct Packet
                    reinterpret_cast<u8*>(&pkt.header.cur_packet_size) + 2);
 
         u8 flags = (pkt.header.isFirst ? 0x01 : 0x00) |
-                   (pkt.header.isLast ? 0x02 : 0x00);
+                   (pkt.header.isLast ? 0x02 : 0x00) |
+                   (pkt.header.isCompressed) ? 0x03 : 0x00;
         buf.push_back(flags);
         buf.push_back(0);
 
@@ -67,18 +73,28 @@ struct Packet
         return buf;
     }
 };
+#pragma pack(pop)
 }
 
-class IConnection
-{
+class ITcpConnection {
 public:
-    virtual void connect( const str &host, const u16 port ) = 0;
-    virtual void disconnect() = 0;
-    virtual void async_write( proto_project::dpt data_type, const vU8 &buffer ) = 0;
-    virtual void async_read() = 0;
-    virtual void process_packet() = 0;
-    virtual void start_receive() = 0;
-    virtual ~IConnection() = default;
+    virtual void doConnect( const str &addr, const u16 &port ) = 0;
+    virtual void doDisconnect() = 0;
+    virtual void asyncWrite( const tcp_data::DataTypes &data_type, const vU8 &buf) = 0;
+    virtual void asyncRead() = 0;
+    virtual void prcsPacket() = 0;
+    virtual void sendUdpData( const udp_data::DataTypes &data_type, const vU8 &buf ) = 0;
+    virtual ~ITcpConnection() = default;
+};
+
+class IUdpConnection {
+public:
+    virtual void listen() = 0;
+    virtual void sendData( const str &addr, const udp_data::DataTypes &data_type, const vU8 &buf ) = 0;
+    virtual void open( const str &addr, const u16 &port ) = 0;
+    virtual void close() = 0;
+    virtual void prcsPacket() = 0;
+    virtual ~IUdpConnection() = default;
 };
 
 // class SysSockConnection : public Interface
@@ -95,8 +111,8 @@ namespace asio = boost::asio;
 struct UdpVar {
     asio::ip::udp::socket socket{nullptr};
     asio::ip::udp::endpoint remote_endpoint{};
-    std::array<char, Constants::BUFFER_SIZE> buffer{};
-    UdpVar( asio::io_context &ctx ) : socket(ctx) {}
+    vU8 buffer{};
+    UdpVar( asio::io_context &ctx ) : socket(ctx), buffer(Constants::BUFFER_SIZE, 0) {}
 };
 
 struct TcpVar {
@@ -104,24 +120,36 @@ struct TcpVar {
     asio::ip::tcp::resolver resolver{nullptr};
     u32 size{0};
     vU8 buffer{};
+    str server_addr{""};
     TcpVar( asio::io_context &ctx ) : socket(ctx), resolver(ctx) {}
 };
 
-class BoostConnection : public IConnection, public std::enable_shared_from_this<BoostConnection>
-{
-protected:
+class BoostUdpConnection : public IUdpConnection, public std::enable_shared_from_this<BoostUdpConnection> {
+private:
     std::unique_ptr<UdpVar> udp_var_{nullptr};
-    std::unique_ptr<TcpVar> tcp_var_{nullptr};
 public:
-    void handle_error( const boost::system::error_code& ec, const str& context );
-    BoostConnection( boost::asio::io_context &ctx);
-    ~BoostConnection() override;
-    void connect( const str &host, const u16 port ) override;
-    void disconnect() override;
-    void async_write( proto_project::dpt data_type, const vU8 &buffer ) override;
-    void async_read() override;
-    void process_packet() override;
-    void start_receive() override;
+    BoostUdpConnection( asio::io_context &ctx );
+    ~BoostUdpConnection() override = default;
+    void listen() override;
+    void sendData( const str &addr, const udp_data::DataTypes &data_type, const vU8 &buf ) override;
+    void open( const str &addr, const u16 &port ) override;
+    void close() override;
+    void prcsPacket() override;
+};
+
+class BoostTcpConnection : public ITcpConnection, public std::enable_shared_from_this<BoostTcpConnection> {
+private:
+    std::unique_ptr<TcpVar> tcp_var_{nullptr};
+    std::shared_ptr<BoostUdpConnection> udp_{nullptr};
+public:
+    BoostTcpConnection( asio::io_context &ctx );
+    ~BoostTcpConnection() override = default;
+    void doConnect( const str &addr, const u16 &port ) override;
+    void doDisconnect() override;
+    void asyncWrite( const tcp_data::DataTypes &data_type, const vU8 &buf) override;
+    void asyncRead() override;
+    void prcsPacket() override;
+    void sendUdpData( const udp_data::DataTypes &data_type, const vU8 &buf ) override;
 };
 
 #endif // CONNECTION_H

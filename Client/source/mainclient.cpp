@@ -1,39 +1,36 @@
 #include "mainclient.h"
 #include "ui_mainclient.h"
 
-MainClient::MainClient(QWidget *parent, boost::asio::io_context &io)
-    : QMainWindow(parent)
+MainClient::MainClient( QWidget *parent, asio::io_context &ctx ) : QMainWindow(parent)
     , ui(new Ui::MainClient)
+    , timer_{std::make_shared<asio::steady_timer>(ctx)}
 {
     ui->setupUi(this);
 
-    QObject::connect(ui->qpsh_connect, &QPushButton::clicked, this, &MainClient::slot_connect);
-    QObject::connect(ui->qpsh_disconnect, &QPushButton::clicked, this, &MainClient::slot_disconnect);
-    QObject::connect(ui->qpsh_send, &QPushButton::clicked, this, &MainClient::slot_send);
+    QObject::connect(ui->qpsh_connect, &QPushButton::clicked, this, &MainClient::slotConnect);
+    QObject::connect(ui->qpsh_disconnect, &QPushButton::clicked, this, &MainClient::slotDisconnect);
+    QObject::connect(ui->qpsh_send, &QPushButton::clicked, this, &MainClient::slotSend);
 
-    if( !Iserver_ ) {
-        Iserver_ = std::make_shared<BoostConnection>(io);
+    if( !conn_ ) {
+        conn_ = std::make_shared<BoostTcpConnection>(ctx);
     }
 }
 
-MainClient::~MainClient()
-{
+MainClient::~MainClient() {
+    conn_->doDisconnect();
     delete ui;
 }
 
-void MainClient::slot_connect()
-{
-    QString host = ui->qlineedit_host->text();
-    Iserver_->connect(host.toStdString(), Constants::SERVER_PORT);
+void MainClient::slotConnect() {
+    const auto host = ui->qlineedit_host->text();
+    conn_->doConnect(host.toStdString(), Constants::SERVER_PORT);
 }
 
-void MainClient::slot_disconnect()
-{
-    Iserver_->disconnect();
+void MainClient::slotDisconnect() {
+    conn_->doDisconnect();
 }
 
-void MainClient::slot_send()
-{
+void MainClient::slotSend() {
     tcp_data::TestStruct _struct;
     _struct.a = "test";
     _struct.b = 1;
@@ -41,6 +38,7 @@ void MainClient::slot_send()
     _struct.d.reserve(5);
     for( size_t i=0;i<5;++i )
         _struct.d.push_back(i+i*i);
+    conn_->asyncWrite(proto_project::dpt::TestStruct, _struct.serilize());
 
     // CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
     // if (!screenshot)
@@ -57,7 +55,9 @@ void MainClient::slot_send()
 
     // ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
 
-    Iserver_->async_write(proto_project::dpt::TestStruct, _struct.serilize());
+    udp_data::TestMessage testMessage{};
+    testMessage.message = "gg";
+    conn_->sendUdpData(udp_data::DataTypes::TestMessage, testMessage.serialize());
 }
 
 // vU8 MainClient::imageToBytes(CGImageRef cgImage)
@@ -98,3 +98,19 @@ void MainClient::slot_send()
 
 //     return rawData;
 // }
+
+void MainClient::startTimer() {
+    timer_->expires_after(std::chrono::seconds(5));
+    timer_->async_wait([this](const boost::system::error_code& ec) {
+        if (!ec) {
+            sendImage();
+            startTimer();
+        } else {
+            std::cerr << "timer err:" + ec.message() << std::endl;
+        }
+    });
+}
+
+void MainClient::sendImage() {
+    conn_->sendUdpData(udp_data::DataTypes::Image, image_);
+}

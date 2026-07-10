@@ -1,18 +1,23 @@
 #include "connection.h"
 
-BoostConnection::BoostConnection(boost::asio::io_context &ctx) :
+BoostUdpConnection::BoostUdpConnection( asio::io_context &ctx ) :
     udp_var_(std::make_unique<UdpVar>(ctx))
-    , tcp_var_(std::make_unique<TcpVar>(ctx))
 {
-    std::cout << "initializing Iserver" << std::endl;
+    std::cout << "initializing BoostUdpConnection..." << std::endl;
 }
 
-BoostConnection::~BoostConnection()
-{
-    this->disconnect();
+void BoostUdpConnection::open( const str &addr, const u16 &port ) {
+    const auto address = asio::ip::make_address(addr);
+    const asio::ip::udp::endpoint endpoint(address, port);
+    udp_var_->socket.open(endpoint.protocol());
+    udp_var_->socket.set_option(asio::socket_base::reuse_address(true));
+    udp_var_->socket.bind(endpoint);
 }
 
-void BoostConnection::start_receive() {
+void BoostUdpConnection::listen() {
+    if (!udp_var_->socket.is_open())
+        return;
+
     udp_var_->socket.async_receive_from(asio::buffer(udp_var_->buffer), udp_var_->remote_endpoint,
         [this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
             if (ec) {
@@ -20,34 +25,122 @@ void BoostConnection::start_receive() {
                 return;
             }
             if (bytes_transferred > 0) {
-                std::string received_data(udp_var_->buffer.data(), bytes_transferred);
+                prcsPacket();
                 std::cout << "Received from "
                           << udp_var_->remote_endpoint.address().to_string()
-                          << ":" << udp_var_->remote_endpoint.port()
-                          << " -> " << received_data << std::endl;
+                          << ":" << udp_var_->remote_endpoint.port() << std::endl;
             }
             if (udp_var_->socket.is_open()) {
-                start_receive();
+                listen();
             }
         }
     );
 }
 
-void BoostConnection::connect( const str &host, const u16 port )
-{
-    try {
-        tcp_var_->resolver.async_resolve(host, std::to_string(port), [this](boost::system::error_code ec, asio::ip::tcp::resolver::results_type endpoints) {
+void BoostUdpConnection::close() {
+    if (udp_var_->socket.is_open()) {
+        boost::system::error_code ec;
+        udp_var_->socket.close(ec);
+    }
+}
+
+void BoostUdpConnection::sendData( const str &addr, const udp_data::DataTypes &data_type, const vU8 &buf ) {
+    if (!udp_var_->socket.is_open())
+        return;
+
+    const auto address = asio::ip::make_address(addr);
+    const asio::ip::udp::endpoint target(address, Constants::SERVER_PORT);
+    auto makeHeader = [&](const u32 allSendDataSize,
+                          const u32 curPacketNumber,
+                          const u32 countAllPackets,
+                          const u32 curPacketFullSize,
+                          bool isF,
+                          bool isE,
+                          bool isCompressed) {
+        proto_project::PacketHeader h;
+        h.server_hash = Constants::SERVER_HASH;
+        h.total_data_size = allSendDataSize;
+        h.total_cnt_packets = countAllPackets;
+        h.cur_packet_number = curPacketNumber + 1;
+        h.cur_packet_size = curPacketFullSize;
+        h.isFirst = isF ? 1 : 0;
+        h.isLast = isE  ? 1 : 0;
+        h.isCompressed = isCompressed ? 1 : 0;
+        return h;
+    };
+
+    auto compressData = [&](const vU8 &input, int level = 3) -> vU8 {
+        // const size_t maxCompressedSize = ZSTD_compressBound(input.size());
+        // vU8 compressed(maxCompressedSize);
+
+        // size_t const actualSize = ZSTD_compress(
+        //     compressed.data(), compressed.size(),
+        //     input.data(), input.size(),
+        //     level);
+
+        // if (ZSTD_isError(actualSize)) {
+        //     throw std::runtime_error(std::string("ZSTD compress error: ") + ZSTD_getErrorName(actualSize));
+        // }
+
+        // compressed.resize(actualSize);
+        // return compressed;
+        return {};
+    };
+
+    auto compressedData = compressData(buf);
+    bool useCompression = !compressedData.empty() && compressedData.size() < buf.size();
+
+    const vU8 dataToSend = (useCompression) ? compressedData : buf;
+    const auto sendTotalSize = static_cast<u32>(dataToSend.size());
+
+    const auto cnt = (sendTotalSize + Constants::MAX_SIZE_UDP - 1) / Constants::MAX_SIZE_UDP;
+
+    for (auto idx{0};idx<cnt;++idx) {
+        const bool last = (idx + 1 == cnt);
+        const auto chunk = last ? (sendTotalSize - Constants::MAX_SIZE_UDP * idx) : Constants::MAX_SIZE_UDP;
+        const size_t offset = idx * Constants::MAX_SIZE_UDP;
+
+        proto_project::Packet pkt{};
+        proto_project::PacketHeader H = makeHeader(sendTotalSize, idx, cnt,
+                                                   sizeof(proto_project::PacketHeader) + sizeof(u16) + chunk,
+                                                   idx == 0, last, useCompression);
+
+        pkt.header = H;
+        pkt.d_type = static_cast<u16>(data_type);
+        pkt.buffer.assign(dataToSend.begin() + offset,
+                        dataToSend.begin() + offset + chunk);
+        vU8 full_packet = proto_project::Packet::serialize(pkt);
+
+        udp_var_->socket.async_send_to(asio::buffer(full_packet), target, [](const boost::system::error_code &ec, std::size_t) {
             if (ec) {
-                this->handle_error(ec, "resolve");
+                std::cerr << "send error:" << ec.message() << std::endl;
+            }
+        });
+    }
+}
+
+BoostTcpConnection::BoostTcpConnection( asio::io_context &ctx ) :
+    tcp_var_(std::make_unique<TcpVar>(ctx))
+    , udp_(std::make_shared<BoostUdpConnection>(ctx)) {
+    std::cout << "initializing BoostTcpConnection..." << std::endl;
+}
+
+void BoostTcpConnection::doConnect( const str &addr, const u16 &port )
+{
+    tcp_var_->server_addr = addr;
+    try {
+        tcp_var_->resolver.async_resolve(addr, std::to_string(port), [this](boost::system::error_code ec, asio::ip::tcp::resolver::results_type endpoints) {
+            if (ec) {
+                doDisconnect();
                 return;
             }
-            boost::asio::async_connect(tcp_var_->socket, endpoints, [this](boost::system::error_code ec, asio::ip::tcp::endpoint)
+            asio::async_connect(tcp_var_->socket, endpoints, [this](boost::system::error_code ec, asio::ip::tcp::endpoint)
             {
                 if (ec) {
-                    this->handle_error(ec, "connect");
+                    doDisconnect();
                 } else {
                     std::cout << "Connected to server!" << std::endl;
-                    this->async_read();
+                    asyncRead();
                 }
              });
         });
@@ -56,29 +149,29 @@ void BoostConnection::connect( const str &host, const u16 port )
     }
 }
 
-void BoostConnection::async_read() {
+void BoostTcpConnection::asyncRead() {
     auto self = shared_from_this();
-    boost::asio::async_read(tcp_var_->socket, boost::asio::buffer(&tcp_var_->size, sizeof(tcp_var_->size)),
+    asio::async_read(tcp_var_->socket, asio::buffer(&tcp_var_->size, sizeof(tcp_var_->size)),
         [this, self](boost::system::error_code ec, size_t) {
-        if (ec == boost::asio::error::eof) {
-            std::cerr << "Client disconnected" << std::endl;
+        if (ec == asio::error::eof) {
+            std::cerr << "Server disconnect: " << ec.message() << std::endl;
             return;
         }
         tcp_var_->buffer.resize(tcp_var_->size);
-        boost::asio::async_read(tcp_var_->socket, boost::asio::buffer(tcp_var_->buffer),
+        asio::async_read(tcp_var_->socket, asio::buffer(tcp_var_->buffer),
         [this, self](boost::system::error_code ec, size_t) {
             if (ec) {
                 std::cerr << "Body read error: " << ec.message() << std::endl;
                 return;
             }
-            this->process_packet();
-            this->async_read();
+            prcsPacket();
+            asyncRead();
         });
     });
 }
 
-void BoostConnection::process_packet() {
-    unsigned offset = 0;
+void BoostTcpConnection::prcsPacket() {
+    u32 offset = 0;
 
     proto_project::Packet pkt;
     memcpy(&pkt.header.server_hash, &(tcp_var_->buffer)[offset], 2);
@@ -91,9 +184,10 @@ void BoostConnection::process_packet() {
     offset += 2;
     memcpy(&pkt.header.cur_packet_size, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    uint8_t flags = (tcp_var_->buffer)[offset];
+    u8 flags = (tcp_var_->buffer)[offset];
     pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
     pkt.header.isLast = (flags & 0x02) ? 1 : 0;
+    pkt.header.isCompressed = (flags & 0x03) ? 1 : 0;
     offset += 2;
     memcpy(&pkt.d_type, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
@@ -110,7 +204,7 @@ void BoostConnection::process_packet() {
         return;
     }
 
-    switch (pkt.d_type) {
+    switch (static_cast<tcp_data::DataTypes>(pkt.d_type)) {
     case tcp_data::DataTypes::TestStruct:
     {
         tcp_data::TestStruct a = tcp_data::TestStruct::deserialize(pkt.buffer.data());
@@ -128,36 +222,26 @@ void BoostConnection::process_packet() {
         tcp_data::FirstData a = tcp_data::FirstData::deserialize(pkt.buffer.data());
         std::cout << "addr=" << a.client_addr << std::endl;
         std::cout << "port=" << a.client_port << std::endl;
-        const auto address = asio::ip::make_address(a.client_addr);
-        const asio::ip::udp::endpoint endpoint(address, a.client_port);
-        udp_var_->socket.open(endpoint.protocol());
-        udp_var_->socket.set_option(asio::socket_base::reuse_address(true));
-        udp_var_->socket.bind(endpoint);
-        this->start_receive();
+        udp_->open(a.client_addr, a.client_port);
+        udp_->listen();
         break;
     }
-    default: {
-        std::cerr << "wtf is this data" << std::endl;
-        break;
-    }
+    default: break;
     }
 }
 
-void BoostConnection::disconnect()
+void BoostTcpConnection::doDisconnect()
 {
     if (tcp_var_->socket.is_open()) {
         boost::system::error_code ec;
         tcp_var_->socket.shutdown(asio::ip::tcp::socket::shutdown_both, ec);
         tcp_var_->socket.close(ec);
     }
-    if (udp_var_->socket.is_open()) {
-        boost::system::error_code ec;
-        udp_var_->socket.close(ec);
-    }
+    udp_->close();
     std::cout << "Connection`s disconnect" << std::endl;
 }
 
-void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffer)
+void BoostTcpConnection::asyncWrite( const tcp_data::DataTypes &data_type, const vU8 &buffer )
 {
     if (!tcp_var_->socket.is_open()) {
         std::cerr << "Connect to server for send!" << std::endl;
@@ -165,7 +249,7 @@ void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffe
     }
 
     proto_project::Packet pkt{};
-    pkt.d_type = data_type;
+    pkt.d_type = static_cast<u16>(data_type);
     pkt.header.server_hash = Constants::SERVER_HASH;
     pkt.header.total_data_size = buffer.size();
     pkt.header.total_cnt_packets = 1;
@@ -173,6 +257,7 @@ void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffe
     pkt.header.cur_packet_size = buffer.size() + sizeof(u16) + sizeof(proto_project::phr);
     pkt.header.isFirst = 1;
     pkt.header.isLast = 1;
+    pkt.header.isCompressed = 0;
     pkt.buffer = buffer;
 
     vU8 full_packet = proto_project::Packet::serialize(pkt);
@@ -187,7 +272,7 @@ void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffe
 
     boost::asio::async_write(tcp_var_->socket, buffers, [this](boost::system::error_code ec, size_t length) {
         if (ec) {
-            handle_error(ec, "send");
+            doDisconnect();
         } else {
             std::cout << "Отправлено " << length << " байт" << std::endl;
         }
@@ -198,30 +283,46 @@ void BoostConnection::async_write(proto_project::dpt data_type, const vU8 &buffe
               << ", размер: " << buffers.size() << " байт" << std::endl;
 }
 
-void BoostConnection::handle_error(const boost::system::error_code& ec, const std::string& context)
-{
-    if( ec == boost::asio::error::eof )
-    {
-        std::cout << "Connection closed by server" << std::endl;
-        this->disconnect();
+void BoostTcpConnection::sendUdpData( const udp_data::DataTypes &data_type, const vU8 &buf ) {
+    udp_->sendData(tcp_var_->server_addr, data_type, buf);
+}
+
+void BoostUdpConnection::prcsPacket() {
+    u32 offset = 0;
+
+    proto_project::Packet pkt;
+    memcpy(&pkt.header.server_hash, &(udp_var_->buffer)[offset], 2);
+    offset += 2;
+    memcpy(&pkt.header.total_data_size, &(udp_var_->buffer)[offset], 4);
+    offset += 4;
+    memcpy(&pkt.header.total_cnt_packets, &(udp_var_->buffer)[offset], 2);
+    offset += 2;
+    memcpy(&pkt.header.cur_packet_number, &(udp_var_->buffer)[offset], 2);
+    offset += 2;
+    memcpy(&pkt.header.cur_packet_size, &(udp_var_->buffer)[offset], 2);
+    offset += 2;
+    u8 flags = (udp_var_->buffer)[offset];
+    pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
+    pkt.header.isLast = (flags & 0x02) ? 1 : 0;
+    pkt.header.isCompressed = (flags & 0x03) ? 1 : 0;
+    offset += 2;
+    memcpy(&pkt.d_type, &(udp_var_->buffer)[offset], 2);
+    offset += 2;
+
+    pkt.buffer.assign(udp_var_->buffer.begin() + offset, udp_var_->buffer.end());
+
+    if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
+        std::cerr << "ERROR -> != kServerHash" << std::endl;
+        return;
     }
-    else if( ec == boost::asio::error::connection_reset)
+
+    switch (static_cast<udp_data::DataTypes>(pkt.d_type))
     {
-        std::cout << "Connection reset by server" << std::endl;
-        this->disconnect();
+    case udp_data::DataTypes::TestMessage: {
+        udp_data::TestMessage s = udp_data::TestMessage::deserialize(pkt.buffer.data());
+        std::cout << s.message << std::endl;
+        break;
     }
-    else if( ec == boost::asio::error::connection_aborted)
-    {
-        std::cout << "Connection aborted" << std::endl;
-        this->disconnect();
-    }
-    else if( ec == boost::asio::error::broken_pipe)
-    {
-        std::cout << "Connection (broken pipe)" << std::endl;
-        this->disconnect();
-    }
-    else
-    {
-        std::cout << "Error in: " << context << " ;ec = " << ec.message() << std::endl;
+    default: break;
     }
 }

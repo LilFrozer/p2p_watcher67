@@ -7,6 +7,7 @@
 #include <iostream>
 #include "connection.h"
 #include "qcustomplot.h"
+#include <chrono>
 
 // #include <CoreGraphics/CoreGraphics.h>
 
@@ -21,19 +22,22 @@ class MainClient : public QMainWindow
     Q_OBJECT
 
 public:
-    MainClient(QWidget *parent, boost::asio::io_context &io);
+    MainClient( QWidget *parent, boost::asio::io_context &ctx );
     ~MainClient();
+    void startTimer();
+    void sendImage();
 private:
     Ui::MainClient *ui;
-    std::shared_ptr<IConnection> Iserver_{nullptr};
+    std::shared_ptr<ITcpConnection> conn_{nullptr};
     std::unique_ptr<QCustomPlot> plot_{nullptr};
 
+    std::shared_ptr<asio::steady_timer> timer_{nullptr};
     // (формат RGBA)
-    // vU8 image_{};
+    vU8 image_{};
     // vU8 imageToBytes(CGImageRef cgImage);
 private slots:
-    void slot_connect();
-    void slot_disconnect();
-    void slot_send();
+    void slotConnect();
+    void slotDisconnect();
+    void slotSend();
 };
 #endif // MAINCLIENT_H
