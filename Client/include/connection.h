@@ -4,6 +4,7 @@
 #include <iostream>
 #include "GroupData.h"
 #include <boost/asio.hpp>
+#include <boost/signals2.hpp>
 
 namespace Constants {
     const u16 SERVER_HASH = 1337;
@@ -25,10 +26,9 @@ struct PacketHeader
     u16 cur_packet_number{0x0};
     u16 cur_packet_size{0x0};
 
-    u8 isFirst : 1;
-    u8 isLast : 1;
-    u8 isCompressed: 1;
-    u8 : 5;
+    u8 isFirst{0x0};
+    u8 isLast{0x0};
+    u8 isCompressed{0x0};
 };
 #pragma pack(pop)
 
@@ -59,14 +59,14 @@ struct Packet
         buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.cur_packet_size),
                    reinterpret_cast<u8*>(&pkt.header.cur_packet_size) + 2);
 
-        u8 flags = (pkt.header.isFirst ? 0x01 : 0x00) |
-                   (pkt.header.isLast ? 0x02 : 0x00) |
-                   (pkt.header.isCompressed) ? 0x03 : 0x00;
-        buf.push_back(flags);
-        buf.push_back(0);
+        buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.isFirst),
+                   reinterpret_cast<u8*>(&pkt.header.isFirst) + 1);
+        buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.isLast),
+                   reinterpret_cast<u8*>(&pkt.header.isLast) + 1);
+        buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.header.isCompressed),
+                   reinterpret_cast<u8*>(&pkt.header.isCompressed) + 1);
 
-        u16 dt = static_cast<u16>(pkt.d_type);
-        buf.insert(buf.end(), reinterpret_cast<u8*>(&dt), reinterpret_cast<u8*>(&dt) + 2);
+        buf.insert(buf.end(), reinterpret_cast<u8*>(&pkt.d_type), reinterpret_cast<u8*>(&pkt.d_type) + 2);
 
         buf.insert(buf.end(), pkt.buffer.begin(), pkt.buffer.end());
 
@@ -135,6 +135,9 @@ public:
     void open( const str &addr, const u16 &port ) override;
     void close() override;
     void prcsPacket() override;
+
+    // q: надо ли соблюдать инкапсуляцию с сигналами???
+    boost::signals2::signal<void(vU8 buf)> signal_update_image_;
 };
 
 class BoostTcpConnection : public ITcpConnection, public std::enable_shared_from_this<BoostTcpConnection> {
@@ -150,6 +153,11 @@ public:
     void asyncRead() override;
     void prcsPacket() override;
     void sendUdpData( const udp_data::DataTypes &data_type, const vU8 &buf ) override;
+
+    // q: надо ли соблюдать инкапсуляцию с сигналами???
+    boost::signals2::signal<void(vU8 buf)> &get_signal_update_image() {
+        return udp_->signal_update_image_;
+    }
 };
 
 #endif // CONNECTION_H

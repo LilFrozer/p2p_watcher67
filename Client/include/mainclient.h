@@ -8,8 +8,7 @@
 #include "connection.h"
 #include "qcustomplot.h"
 #include <chrono>
-
-// #include <CoreGraphics/CoreGraphics.h>
+#include <CoreGraphics/CoreGraphics.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -25,16 +24,15 @@ public:
     MainClient( QWidget *parent, boost::asio::io_context &ctx );
     ~MainClient();
     void startTimer();
-    void sendImage();
+    void showImage(vU8 buf);
 private:
     Ui::MainClient *ui;
     std::shared_ptr<ITcpConnection> conn_{nullptr};
     std::unique_ptr<QCustomPlot> plot_{nullptr};
 
     std::shared_ptr<asio::steady_timer> timer_{nullptr};
-    // (формат RGBA)
-    vU8 image_{};
-    // vU8 imageToBytes(CGImageRef cgImage);
+    // ---format RGBA---
+    vU8 imageToBytes(CGImageRef cgImage);
 private slots:
     void slotConnect();
     void slotDisconnect();

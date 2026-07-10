@@ -26,9 +26,9 @@ void BoostUdpConnection::listen() {
             }
             if (bytes_transferred > 0) {
                 prcsPacket();
-                std::cout << "Received from "
-                          << udp_var_->remote_endpoint.address().to_string()
-                          << ":" << udp_var_->remote_endpoint.port() << std::endl;
+                // std::cout << "Received from "
+                //           << udp_var_->remote_endpoint.address().to_string()
+                //           << ":" << udp_var_->remote_endpoint.port() << std::endl;
             }
             if (udp_var_->socket.is_open()) {
                 listen();
@@ -184,11 +184,14 @@ void BoostTcpConnection::prcsPacket() {
     offset += 2;
     memcpy(&pkt.header.cur_packet_size, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
-    u8 flags = (tcp_var_->buffer)[offset];
-    pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
-    pkt.header.isLast = (flags & 0x02) ? 1 : 0;
-    pkt.header.isCompressed = (flags & 0x03) ? 1 : 0;
-    offset += 2;
+
+    memcpy(&pkt.header.isFirst, &(tcp_var_->buffer)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isLast, &(tcp_var_->buffer)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isCompressed, &(tcp_var_->buffer)[offset], 1);
+    offset += 1;
+
     memcpy(&pkt.d_type, &(tcp_var_->buffer)[offset], 2);
     offset += 2;
 
@@ -301,26 +304,48 @@ void BoostUdpConnection::prcsPacket() {
     offset += 2;
     memcpy(&pkt.header.cur_packet_size, &(udp_var_->buffer)[offset], 2);
     offset += 2;
-    u8 flags = (udp_var_->buffer)[offset];
-    pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
-    pkt.header.isLast = (flags & 0x02) ? 1 : 0;
-    pkt.header.isCompressed = (flags & 0x03) ? 1 : 0;
-    offset += 2;
+    memcpy(&pkt.header.isFirst, &(udp_var_->buffer)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isLast, &(udp_var_->buffer)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isCompressed, &(udp_var_->buffer)[offset], 1);
+    offset += 1;
     memcpy(&pkt.d_type, &(udp_var_->buffer)[offset], 2);
     offset += 2;
 
     pkt.buffer.assign(udp_var_->buffer.begin() + offset, udp_var_->buffer.end());
 
     if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
-        std::cerr << "ERROR -> != kServerHash" << std::endl;
+        std::cerr << "!=SERVER_HASH" << std::endl;
         return;
     }
 
     switch (static_cast<udp_data::DataTypes>(pkt.d_type))
     {
     case udp_data::DataTypes::TestMessage: {
-        udp_data::TestMessage s = udp_data::TestMessage::deserialize(pkt.buffer.data());
-        std::cout << s.message << std::endl;
+        const auto s = udp_data::TestMessage::deserialize(pkt.buffer.data());
+        std::cout << "message=" << s.message << std::endl;
+        break;
+    }
+    case udp_data::DataTypes::Image: {
+        static vU8 assembly_buffer;                 // итоговый буфер
+        static u32 assembly_total_size = 0;         // полный размер данных
+        if (pkt.header.isFirst == 1) {
+            assembly_total_size = pkt.header.total_data_size;
+            assembly_buffer.assign(assembly_total_size, 0);
+        }
+        const u32 chunk_offset = (pkt.header.cur_packet_number - 1) * Constants::MAX_SIZE_UDP;
+        const size_t copy_size = pkt.buffer.size();
+        std::memcpy(assembly_buffer.data() + chunk_offset, pkt.buffer.data(), copy_size);
+        if (pkt.header.isLast == 1) {
+            if (pkt.header.isCompressed == 1) {
+                // assembly_buffer = decompress_data_zstd(assembly_buffer);
+            }
+            std::cout << "size=" << assembly_buffer.size() << std::endl;
+            this->signal_update_image_(assembly_buffer);
+            assembly_buffer.clear();
+            assembly_total_size = 0;
+        }
         break;
     }
     default: break;

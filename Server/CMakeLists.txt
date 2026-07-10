@@ -19,12 +19,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(Server
     source/main.cpp
         source/crc.cpp
-    source/Server.cpp
-    include/Server.h
+        source/AsioTcpServer.cpp
+        include/Server.h
     source/ClientSession.cpp
     include/ClientSession.h
     include/GroupData.h
         include/Logger.h
+        source/AsioUdpServer.cpp
 )
 
 target_include_directories(Server PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
     // Crc::testCrc("A590006C00000000000004000000");
     // Crc::testCrc("A50000400002a000000000000000");
     try {
-        boost::asio::io_context io_context;
+        asio::io_context io_context;
         const auto Server{std::make_shared<AsioTcpServer>(io_context)};
         Server->open(Constants::SERVER_ADDR, Constants::SERVER_PORT);
         Server->listen();

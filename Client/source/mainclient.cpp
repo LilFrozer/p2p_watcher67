@@ -13,6 +13,7 @@ MainClient::MainClient( QWidget *parent, asio::io_context &ctx ) : QMainWindow(p
 
     if( !conn_ ) {
         conn_ = std::make_shared<BoostTcpConnection>(ctx);
+        static_cast<BoostTcpConnection*>(conn_.get())->get_signal_update_image().connect(boost::bind(&MainClient::showImage, this, boost::placeholders::_1));
     }
 }
 
@@ -31,6 +32,7 @@ void MainClient::slotDisconnect() {
 }
 
 void MainClient::slotSend() {
+    // ---tcp---
     tcp_data::TestStruct _struct;
     _struct.a = "test";
     _struct.b = 1;
@@ -40,77 +42,79 @@ void MainClient::slotSend() {
         _struct.d.push_back(i+i*i);
     conn_->asyncWrite(proto_project::dpt::TestStruct, _struct.serilize());
 
-    // CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
-    // if (!screenshot)
-    //     throw std::runtime_error("");
-
-    // image_ = imageToBytes(screenshot);
-
-    // CGImageRelease(screenshot);
-
-    // QImage image(image_.data(), 2880, 1800, 2880 * 4, QImage::Format_RGBA8888);
-    // QPixmap pixmap = QPixmap::fromImage(image);
-    // if (pixmap.isNull())
-    //     throw std::runtime_error("Не удалось создать QPixmap");
-
-    // ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
-
+    // --udp--
     udp_data::TestMessage testMessage{};
-    testMessage.message = "gg";
+    testMessage.message = "hi, this is image!";
     conn_->sendUdpData(udp_data::DataTypes::TestMessage, testMessage.serialize());
+
+    CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
+    if (!screenshot)
+        throw std::runtime_error("");
+    conn_->sendUdpData(udp_data::DataTypes::Image, imageToBytes(screenshot));
 }
 
-// vU8 MainClient::imageToBytes(CGImageRef cgImage)
-// {
-//     if (!cgImage)
-//         return {};
+void MainClient::showImage(vU8 buf) {
+    std::cout << "image=" << buf.size() << std::endl;
 
-//     size_t width = CGImageGetWidth(cgImage);
-//     size_t height = CGImageGetHeight(cgImage);
-//     size_t bitsPerPixel = CGImageGetBitsPerPixel(cgImage);
-//     size_t bytesPerRow = CGImageGetBytesPerRow(cgImage);
+    CGImageRef screenshot = CGDisplayCreateImage(CGMainDisplayID());
+    if (!screenshot)
+        throw std::runtime_error("");
+    CGImageRelease(screenshot);
 
-//     // !!!Создаём контекст для извлечения данных в формате RGBA!!!
-//     CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
-//     vU8 rawData(height * bytesPerRow);
+    QImage image(buf.data(), 2880, 1800, 2880 * 4, QImage::Format_RGBA8888);
+    QPixmap pixmap = QPixmap::fromImage(image);
+    if (pixmap.isNull())
+        throw std::runtime_error("Не удалось создать QPixmap");
 
-//     CGContextRef context = CGBitmapContextCreate(
-//         rawData.data(),
-//         width,
-//         height,
-//         8,              // bits per component
-//         bytesPerRow,
-//         colorSpace,
-//         kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
-//     );
+    ui->image->setPixmap(pixmap.scaled(ui->image->size(), Qt::KeepAspectRatio));
+}
 
-//     if (!context) {
-//         CGColorSpaceRelease(colorSpace);
-//         return {};
-//     }
+vU8 MainClient::imageToBytes(CGImageRef cgImage)
+{
+    if (!cgImage)
+        return {};
 
-//     // !!!Рисуем изображение в контекст, чтобы получить пиксельные данные!!!
-//     CGRect rect = CGRectMake(0, 0, width, height);
-//     CGContextDrawImage(context, rect, cgImage);
+    size_t width = CGImageGetWidth(cgImage);
+    size_t height = CGImageGetHeight(cgImage);
+    size_t bitsPerPixel = CGImageGetBitsPerPixel(cgImage);
+    size_t bytesPerRow = CGImageGetBytesPerRow(cgImage);
 
-//     CGContextRelease(context);
-//     CGColorSpaceRelease(colorSpace);
+    // !!!Создаём контекст для извлечения данных в формате RGBA!!!
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    vU8 rawData(height * bytesPerRow);
 
-//     return rawData;
-// }
+    CGContextRef context = CGBitmapContextCreate(
+        rawData.data(),
+        width,
+        height,
+        8,              // bits per component
+        bytesPerRow,
+        colorSpace,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big
+    );
+
+    if (!context) {
+        CGColorSpaceRelease(colorSpace);
+        return {};
+    }
+
+    // !!!Рисуем изображение в контекст, чтобы получить пиксельные данные!!!
+    CGRect rect = CGRectMake(0, 0, width, height);
+    CGContextDrawImage(context, rect, cgImage);
+
+    CGContextRelease(context);
+    CGColorSpaceRelease(colorSpace);
+
+    return rawData;
+}
 
 void MainClient::startTimer() {
     timer_->expires_after(std::chrono::seconds(5));
     timer_->async_wait([this](const boost::system::error_code& ec) {
         if (!ec) {
-            sendImage();
             startTimer();
         } else {
             std::cerr << "timer err:" + ec.message() << std::endl;
         }
     });
-}
-
-void MainClient::sendImage() {
-    conn_->sendUdpData(udp_data::DataTypes::Image, image_);
 }

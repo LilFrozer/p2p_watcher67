@@ -5,7 +5,7 @@ AsioTcpClientSession::AsioTcpClientSession( asio::ip::tcp::socket socket, const 
     socket_(std::move(socket))
     , cur_client_id_{client_id}
 {
-    Log::instance()("...!", LoggerMode::info);
+    Log::instance()("!...!", LoggerMode::info);
 }
 
 void AsioTcpClientSession::startSession() {
@@ -16,8 +16,8 @@ void AsioTcpClientSession::doRead() {
     auto self = shared_from_this();
     asio::async_read(socket_, asio::buffer(&size_, sizeof(size_)),
         [this, self](boost::system::error_code ec, size_t) {
-        if (ec == boost::asio::error::eof) {
-            signalDeleting_(cur_client_id_);
+        if (ec == asio::error::eof) {
+            this->signal_deleting(cur_client_id_);
             Log::instance()("!disconnected!", LoggerMode::error);
             return;
         }
@@ -48,23 +48,24 @@ void AsioTcpClientSession::prcsPacket() {
     offset += 2;
     memcpy(&pkt.header.cur_packet_size, &(this->buffer_)[offset], 2);
     offset += 2;
-    uint8_t flags = (this->buffer_)[offset];
-    pkt.header.isFirst = (flags & 0x01) ? 1 : 0;
-    pkt.header.isLast = (flags & 0x02) ? 1 : 0;
-    pkt.header.isCompressed = (flags & 0x03) ? 1 : 0;
-    offset += 2;
+    memcpy(&pkt.header.isFirst, &(this->buffer_)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isLast, &(this->buffer_)[offset], 1);
+    offset += 1;
+    memcpy(&pkt.header.isCompressed, &(this->buffer_)[offset], 1);
+    offset += 1;
     memcpy(&pkt.d_type, &(this->buffer_)[offset], 2);
     offset += 2;
 
     pkt.buffer.assign((this->buffer_).begin() + offset, (this->buffer_).end());
 
     if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
-        std::cerr << "ERROR -> != kServerHash" << std::endl;
+        Log::instance()("!=SERVER_HASH", LoggerMode::error);
         return;
     }
 
     if ( pkt.header.isFirst != 1 || pkt.header.isLast != 1 ) {
-        std::cerr << "ERROR -> !flags" << std::endl;
+        Log::instance()("!flags", LoggerMode::error);
         return;
     }
 
@@ -82,10 +83,7 @@ void AsioTcpClientSession::prcsPacket() {
             std::cout << std::endl;
             break;
         }
-        default: {
-            std::cerr << "wtf is this data" << std::endl;
-            break;
-        }
+        default: break;
     }
 }
 
