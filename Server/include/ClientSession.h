@@ -8,10 +8,10 @@
 
 namespace Constants {
     const str SERVER_ADDR{"127.0.0.1"};
-    const u16 SERVER_HASH{1337};
-    const u16 SERVER_PORT{1122};
-    const u16 BUFFER_SIZE = 1472;
-    const u16 MAX_SIZE_UDP = 1472;
+    constexpr u16 SERVER_HASH{1337};
+    constexpr u16 SERVER_PORT{1122};
+    constexpr u16 BUFFER_SIZE = 1472;
+    constexpr u16 MAX_SIZE_UDP = 1472;
 }
 
 namespace proto_project {
@@ -79,27 +79,27 @@ class ITcpClientSession
 public:
     virtual void startSession() = 0;
     virtual void doRead() = 0;
-    virtual void prcsPacket() = 0;
     virtual void doSend( const tcp_data::DataTypes &dtype, const vU8 &buffer ) = 0;
     virtual ~ITcpClientSession() = default;
 };
 
 namespace asio = boost::asio;
+using skt = asio::ip::tcp::socket;
 
 class AsioTcpClientSession : public ITcpClientSession, public std::enable_shared_from_this<AsioTcpClientSession> {
 protected:
-    u32 cur_client_id_{0};
-    asio::ip::tcp::socket socket_{nullptr};
+    skt socket_{nullptr};
     u32 size_{0};
     vU8 buffer_{};
+    u32 cur_client_id_{0};
 public:
-    explicit AsioTcpClientSession( asio::ip::tcp::socket socket, const u32 &client_id );
+    explicit AsioTcpClientSession( skt socket, const u32 &client_id );
     ~AsioTcpClientSession() override = default;
     void startSession() override;
     void doRead() override;
-    void prcsPacket() override;
     void doSend( const tcp_data::DataTypes &dtype, const vU8 &buffer ) override;
 
     // q: надо ли соблюдать инкапсуляцию с сигналами???
     boost::signals2::signal<void(u32)> signal_deleting;
-};
+    boost::signals2::signal<void(vU8)> signal_process_packet;
+ };

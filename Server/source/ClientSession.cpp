@@ -1,8 +1,8 @@
 #include "ClientSession.h"
 #include <iostream>
 
-AsioTcpClientSession::AsioTcpClientSession( asio::ip::tcp::socket socket, const u32 &client_id ) :
-    socket_(std::move(socket))
+AsioTcpClientSession::AsioTcpClientSession( skt socket, const u32 &client_id )
+    : socket_(std::move(socket))
     , cur_client_id_{client_id}
 {
     Log::instance()("!...!", LoggerMode::info);
@@ -28,63 +28,10 @@ void AsioTcpClientSession::doRead() {
                 Log::instance()(ec.message(), LoggerMode::error);
                 return;
             }
-            prcsPacket();
+            this->signal_process_packet(buffer_);
             doRead();
         });
     });
-}
-
-void AsioTcpClientSession::prcsPacket() {
-    u32 offset = 0;
-
-    proto_project::Packet pkt{};
-    memcpy(&pkt.header.server_hash, &(this->buffer_)[offset], 2);
-    offset += 2;
-    memcpy(&pkt.header.total_data_size, &(this->buffer_)[offset], 4);
-    offset += 4;
-    memcpy(&pkt.header.total_cnt_packets, &(this->buffer_)[offset], 2);
-    offset += 2;
-    memcpy(&pkt.header.cur_packet_number, &(this->buffer_)[offset], 2);
-    offset += 2;
-    memcpy(&pkt.header.cur_packet_size, &(this->buffer_)[offset], 2);
-    offset += 2;
-    memcpy(&pkt.header.isFirst, &(this->buffer_)[offset], 1);
-    offset += 1;
-    memcpy(&pkt.header.isLast, &(this->buffer_)[offset], 1);
-    offset += 1;
-    memcpy(&pkt.header.isCompressed, &(this->buffer_)[offset], 1);
-    offset += 1;
-    memcpy(&pkt.d_type, &(this->buffer_)[offset], 2);
-    offset += 2;
-
-    pkt.buffer.assign((this->buffer_).begin() + offset, (this->buffer_).end());
-
-    if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
-        Log::instance()("!=SERVER_HASH", LoggerMode::error);
-        return;
-    }
-
-    if ( pkt.header.isFirst != 1 || pkt.header.isLast != 1 ) {
-        Log::instance()("!flags", LoggerMode::error);
-        return;
-    }
-
-    switch (static_cast<tcp_data::DataTypes>(pkt.d_type)) {
-        case tcp_data::DataTypes::TestStruct:
-        {
-            std::cout << "---TestStruct---" << std::endl;
-            tcp_data::TestStruct a = tcp_data::TestStruct::deserialize(pkt.buffer.data());
-            std::cout << a.a << std::endl;
-            std::cout << a.b << std::endl;
-            std::cout << a.c << std::endl;
-            for (auto i{0};i<a.d.size();++i) {
-                std::cout << a.d[i] << " ";
-            }
-            std::cout << std::endl;
-            break;
-        }
-        default: break;
-    }
 }
 
 void AsioTcpClientSession::doSend( const tcp_data::DataTypes &dtype, const vU8 &buffer ) {

@@ -1,54 +1,54 @@
 #include "Server.h"
 
-AsioUdpServer::AsioUdpServer( asio::io_context &ctx ) : udp_var_(std::make_unique<UdpVar>(ctx)) {
-    Log::instance()("initialization AsioUdpServer...", LoggerMode::info);
+AsioUdpManager::AsioUdpManager( asio::io_context &ctx ) : types_(std::make_unique<AsioUdpTypes>(ctx)) {
+    Log::instance()("initialization AsioUdpManager...", LoggerMode::info);
 }
 
-void AsioUdpServer::open( const str &addr, const u16 &port ) {
-    if (udp_var_->socket.is_open())
+void AsioUdpManager::open( const str &addr, const u16 &port ) const {
+    if (types_->socket.is_open())
         return;
 
     const auto address = asio::ip::make_address(addr);
     const asio::ip::udp::endpoint endpoint(address, port);
-    udp_var_->socket.open(endpoint.protocol());
-    udp_var_->socket.set_option(asio::socket_base::reuse_address(true));
-    udp_var_->socket.bind(endpoint);
+    types_->socket.open(endpoint.protocol());
+    types_->socket.set_option(asio::socket_base::reuse_address(true));
+    types_->socket.bind(endpoint);
 }
 
-void AsioUdpServer::listen() {
-    if (!udp_var_->socket.is_open())
+void AsioUdpManager::listen() {
+    if (!types_->socket.is_open())
         return;
 
-    udp_var_->socket.async_receive_from(asio::buffer(udp_var_->buffer), udp_var_->remote_endpoint,
+    types_->socket.async_receive_from(asio::buffer(types_->buffer), types_->remote_endpoint,
         [this](const boost::system::error_code& ec, std::size_t bytes_transferred) {
             if (ec) {
                 Log::instance()("Receive error:"+ec.message(), LoggerMode::error);
                 return;
             }
             if (bytes_transferred > 0) {
-                prcsPacket();
+                processPacket(types_->buffer);
                 // std::cout << "Received from "
                 //           << udp_var_->remote_endpoint.address().to_string()
                 //           << ":" << udp_var_->remote_endpoint.port() << std::endl;
             }
-            if (udp_var_->socket.is_open()) {
+            if (types_->socket.is_open()) {
                 listen();
             }
         }
     );
 }
 
-void AsioUdpServer::close() {
+void AsioUdpManager::close() const {
     boost::system::error_code ec;
-    if (udp_var_->socket.is_open())
-        udp_var_->socket.close(ec);
+    if (types_->socket.is_open())
+        types_->socket.close(ec);
 }
 
-void AsioUdpServer::broadCast( const udp_data::DataTypes &data_type, const vU8 &buf ) {
-    if (!udp_var_->socket.is_open())
+void AsioUdpManager::broadCast( const u16 &data_type, const vU8 &buf ) const {
+    if (!types_->socket.is_open())
         return;
 
-    for (const auto &client : clients_) {
+    for (const auto &client : cl_) {
         const auto address = asio::ip::make_address(client.second.addr);
         const asio::ip::udp::endpoint target(address, client.second.port);
         auto makeHeader = [&](const u32 allSendDataSize,
@@ -112,7 +112,7 @@ void AsioUdpServer::broadCast( const udp_data::DataTypes &data_type, const vU8 &
                             dataToSend.begin() + offset + chunk);
             vU8 full_packet = proto_project::Packet::serialize(pkt);
 
-            udp_var_->socket.async_send_to(asio::buffer(full_packet), target, [](const boost::system::error_code &ec, std::size_t) {
+            types_->socket.async_send_to(asio::buffer(full_packet), target, [](const boost::system::error_code &ec, std::size_t) {
                 if (ec) {
                     Log::instance()("Send error:"+ec.message(), LoggerMode::error);
                 }
@@ -121,30 +121,30 @@ void AsioUdpServer::broadCast( const udp_data::DataTypes &data_type, const vU8 &
     }
 }
 
-void AsioUdpServer::prcsPacket() {
+void AsioUdpManager::processPacket( const vU8 &buf ) const {
     u32 offset = 0;
 
     proto_project::Packet pkt;
-    memcpy(&pkt.header.server_hash, &(udp_var_->buffer)[offset], 2);
+    memcpy(&pkt.header.server_hash, &buf[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.total_data_size, &(udp_var_->buffer)[offset], 4);
+    memcpy(&pkt.header.total_data_size, &buf[offset], 4);
     offset += 4;
-    memcpy(&pkt.header.total_cnt_packets, &(udp_var_->buffer)[offset], 2);
+    memcpy(&pkt.header.total_cnt_packets, &buf[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.cur_packet_number, &(udp_var_->buffer)[offset], 2);
+    memcpy(&pkt.header.cur_packet_number, &buf[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.cur_packet_size, &(udp_var_->buffer)[offset], 2);
+    memcpy(&pkt.header.cur_packet_size, &buf[offset], 2);
     offset += 2;
-    memcpy(&pkt.header.isFirst, &(udp_var_->buffer)[offset], 1);
+    memcpy(&pkt.header.isFirst, &buf[offset], 1);
     offset += 1;
-    memcpy(&pkt.header.isLast, &(udp_var_->buffer)[offset], 1);
+    memcpy(&pkt.header.isLast, &buf[offset], 1);
     offset += 1;
-    memcpy(&pkt.header.isCompressed, &(udp_var_->buffer)[offset], 1);
+    memcpy(&pkt.header.isCompressed, &buf[offset], 1);
     offset += 1;
-    memcpy(&pkt.d_type, &(udp_var_->buffer)[offset], 2);
+    memcpy(&pkt.d_type, &buf[offset], 2);
     offset += 2;
 
-    pkt.buffer.assign(udp_var_->buffer.begin() + offset, udp_var_->buffer.end());
+    pkt.buffer.assign(buf.begin() + offset, buf.end());
 
     if ( pkt.header.server_hash != Constants::SERVER_HASH ) {
         Log::instance()("!=SERVER_HASH", LoggerMode::error);
@@ -173,7 +173,7 @@ void AsioUdpServer::prcsPacket() {
                 // assembly_buffer = decompress_data_zstd(assembly_buffer);
             }
             Log::instance()("size="+std::to_string(assembly_buffer.size()), LoggerMode::info);
-            broadCast(udp_data::DataTypes::Image, assembly_buffer);
+            broadCast(static_cast<u16>(udp_data::DataTypes::Image), assembly_buffer);
             assembly_buffer.clear();
             assembly_total_size = 0;
         }
@@ -183,13 +183,14 @@ void AsioUdpServer::prcsPacket() {
     }
 }
 
-void AsioUdpServer::createClient( const u32 &client_id, const ClientInfo &info ) {
-    clients_[client_id] = info;
+void AsioUdpManager::createClient( const u32 &client_id, const ClientInfo &i ) {
+    cl_[client_id] = i;
+    Log::instance()("AsioUdpManager->createClient, id:"+std::to_string(client_id), LoggerMode::info);
 }
 
-void AsioUdpServer::removeClient( const u32 &client_id ) {
-    if (clients_.find(client_id) != clients_.end()) {
-        Log::instance()("Removed client.ID:" + std::to_string(client_id), LoggerMode::info);
-        clients_.erase(clients_.find(client_id));
+void AsioUdpManager::removeClient( const u32 &client_id ) {
+    if (cl_.find(client_id) != cl_.end()) {
+        cl_.erase(cl_.find(client_id));
+        Log::instance()("AsioUdpManager->removeClient, id:" + std::to_string(client_id), LoggerMode::info);
     }
 }
