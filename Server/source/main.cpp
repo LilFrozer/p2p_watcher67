@@ -3,14 +3,18 @@
 
 int main(int argc, char *argv[])
 {
+    if (argc < 2) {
+        Log::instance()("err, argc < 2", LoggerMode::error);
+        return EXIT_FAILURE;
+    }
+    const bool useBoostAsio = argv[0];
     // - res = 38f6
     // Crc::testCrc("A590006C00000000000004000000");
     // Crc::testCrc("A50000400002a000000000000000");
     try {
-        constexpr bool useBoostAsio = true;
         std::shared_ptr<Creator> p{nullptr};
 
-        if (useBoostAsio) {
+        if (useBoostAsio > 0) {
             asio::io_context io_context;
             p = std::make_shared<AsioCreator>(io_context);
             p->Execute(Constants::SERVER_ADDR, Constants::SERVER_PORT);

@@ -7,6 +7,8 @@
 #include "Logger.h"
 #include <chrono>
 
+// -> Структура, {адрес клиента, порт клиент}
+// -> Клиент открывает tcp&udp с одинаковыми параметрами
 struct ClientInfo {
     str addr{""};
     u16 port{0};

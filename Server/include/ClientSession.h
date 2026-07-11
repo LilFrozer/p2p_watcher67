@@ -10,8 +10,8 @@ namespace Constants {
     const str SERVER_ADDR{"127.0.0.1"};
     constexpr u16 SERVER_HASH{1337};
     constexpr u16 SERVER_PORT{1122};
-    constexpr u16 BUFFER_SIZE = 1472;
-    constexpr u16 MAX_SIZE_UDP = 1472;
+    constexpr u16 BUFFER_SIZE{1472};
+    constexpr u16 MAX_SIZE_UDP{1472};
 }
 
 namespace proto_project {
